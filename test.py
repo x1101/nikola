@@ -6,62 +6,46 @@ import shutil
 import sys
 
 from doit.loader import generate_tasks
+from doit.task import Task, DelayedLoader
 from doit.cmd_base import TaskLoader
 from doit.reporter import ExecutedOnlyReporter
 from doit.doit_cmd import DoitMain
 
 
 class MyTaskLoader(TaskLoader):
-    task_getter = lambda self: self.program.get_all_tasks()
-
     def __init__(self, program):
         self.program = program
+
+    def _generate_level(self, levels):
+        if len(levels) == 0: return []
+        level = levels[0]
+        tasks = generate_tasks('level_' + str(level), self.program.get_tasks(level))
+        if len(levels) > 1:
+            eol_name = 'level_' + str(level) + '_wait'
+            tasks.extend(generate_tasks(eol_name, { 'basename': eol_name, 'task_dep': [ t.name for t in tasks ], 'actions': [ ] }))
+            next_level = levels[1]
+            tasks.append(Task('level_' + str(next_level) + '_generate', None, loader=DelayedLoader(lambda: self._generate_more(levels[1:]), executed='level_' + str(level) + '_wait')))
+        return tasks
+
+    def _generate_more(self, levels):
+        tasks = self._generate_level(levels)
+        for t in tasks:
+            yield t
 
     def load_tasks(self, cmd, opt_values, pos_args):
         DOIT_CONFIG = {
             'reporter': ExecutedOnlyReporter,
             'outfile': sys.stderr,
-            'default_tasks': ['copy'],
         }
-        tasks = generate_tasks('test', self.task_getter())
+        tasks = self._generate_level(self.program.get_task_levels())
         return tasks, DOIT_CONFIG
 
-    @staticmethod
-    def get_partial_loader(level):
-        TL = copy.copy(MyTaskLoader)
-        TL.task_getter = lambda self: self.program.get_tasks(level)
-        return TL
 
-
-class MyDoit_Impl(DoitMain):
-    def __init__(self, program, TASK_LOADER):
-        self.program = program
-        self.TASK_LOADER = TASK_LOADER
-        self.task_loader = self.TASK_LOADER(program)
-
-    def run(self, cmd_args):
-        command = cmd_args[0]
-        # ...
-        return super(MyDoit_Impl, self).run(cmd_args)
-
-
-class MyDoit(object):
+class MyDoit(DoitMain):
     def __init__(self, program):
         self.program = program
-
-    def run(self, cmd_args):
-        command = cmd_args[0]
-        if command == 'run':
-            for level in self.program.get_task_levels():
-                print("Processing level {0}".format(level))
-                impl = MyDoit_Impl(self.program, MyTaskLoader.get_partial_loader(level))
-                res = impl.run(cmd_args)
-                if res != 0:
-                    return res
-            return 0
-        else:
-            impl = MyDoit_Impl(self.program, MyTaskLoader)
-            return impl.run(cmd_args)
+        self.TASK_LOADER = MyTaskLoader
+        self.task_loader = self.TASK_LOADER(program)
 
 
 def get_content(filename):
@@ -134,4 +118,4 @@ if __name__ == "__main__":
     os.mkdir('dest')
     write_content('1', 'bla')
     write_content('2', 'bla')
-    sys.exit(main(['run', '-n4']))
+    sys.exit(main(['run', '-n', '4', '-P', 'thread']))
