@@ -19,7 +19,6 @@ class MyTaskLoader(TaskLoader):
     def _generate_level(self, levels):
         level = levels[0]
         names = set()
-        print("GENERATE {0}".format(level))
 
         def flatten(task):
             if isinstance(task, dict):
@@ -35,13 +34,20 @@ class MyTaskLoader(TaskLoader):
                 yield t
         mid_name = 'level_' + str(level) + '_wait'
         done_name = 'level_' + str(level) + '_done'
-        yield { 'basename': mid_name, 'doc': None, 'task_dep': list(names), 'actions': ['echo'] }
+        yield { 'basename': mid_name, 'doc': None, 'name': None, 'task_dep': list(names) }
         done_deps = [mid_name]
         if len(levels) > 1:
             gen_name = 'level_' + str(levels[1]) + '_done'
             done_deps.append(gen_name)
             yield Task(gen_name, None, loader=DelayedLoader(lambda: self._generate_level(levels[1:]), executed=mid_name))
-        yield { 'basename': done_name, 'doc': None, 'task_dep': done_deps, 'actions': ['echo'] }
+        yield { 'basename': done_name, 'doc': None, 'name': None, 'task_dep': done_deps }
+
+    def _generate_all(self, levels):
+        names = set()
+        for level in levels:
+            for task in self.program.get_tasks(level):
+                yield task
+        #yield { 'basename': 'level_all_done', 'doc': None, 'name': None, 'task_dep': [] }
 
     def load_tasks(self, cmd, opt_values, pos_args):
         DOIT_CONFIG = {
@@ -49,7 +55,10 @@ class MyTaskLoader(TaskLoader):
             'outfile': sys.stderr,
         }
         levels = self.program.get_task_levels()
-        tasks = generate_tasks('level_' + str(levels[0]) + '_generate', self._generate_level(levels))
+        if cmd.execute_tasks:
+            tasks = generate_tasks('level_' + str(levels[0]) + '_done', self._generate_level(levels))
+        else:
+            tasks = generate_tasks('level_all_done', self._generate_all(levels))
         return tasks, DOIT_CONFIG
 
 
@@ -111,15 +120,6 @@ class Program():
         }
         yield self._get_tasks_impl(suffix, level)
 
-    def get_all_tasks(self):
-        yield {
-            'basename': 'copy',
-            'name': None,
-            'doc': 'Copies modified or non-existing files over',
-        }
-        for level in self.get_task_levels():
-            yield self._get_tasks_impl('', level)
-
 
 def main(args=None):
     program = Program()
@@ -136,6 +136,6 @@ if __name__ == "__main__":
     os.mkdir('dest')
     write_content('1', 'bla')
     write_content('2', 'bla')
-    #sys.exit(main(['list']))
-    sys.exit(main(['run', '-v', '2']))
+    sys.exit(main(['list', '--all']))
+    #sys.exit(main(['run', '-v', '2']))
     #sys.exit(main(['run', '-n', '4', '-v', '2', '-P', 'thread']))
