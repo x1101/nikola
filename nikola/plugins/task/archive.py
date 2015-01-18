@@ -114,7 +114,6 @@ class Archive(Task):
             "strip_indexes": self.site.config['STRIP_INDEXES'],
             "index_file": self.site.config['INDEX_FILE'],
         }
-        self.site.scan_posts()
         yield self.group_task()
         # TODO add next/prev links for years
         if (kw['create_monthly_archive'] and kw['create_single_archive']) and not kw['create_full_archives']:
