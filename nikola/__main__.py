@@ -329,6 +329,8 @@ class NikolaTaskLoader(TaskLoader):
             }
         stages = self.nikola.get_task_stages()
         DOIT_CONFIG['default_tasks'] = []
+        DOIT_CONFIG['minversion'] = (0, 27, 0)
+        DOIT_CONFIG['par_type'] = 'thread'  # multi-processing won't work with doit's approach of pickling task parameters
         tasks = []
         previous_stage = None
         for stage in stages:
