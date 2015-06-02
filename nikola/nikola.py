@@ -1176,6 +1176,8 @@ class Nikola(object):
                 data = data.decode('utf-8')
             rss_file.write(data)
 
+    path_cache = {}
+
     def path(self, kind, name, lang=None, is_link=False):
         """Build the path to a certain kind of page.
 
@@ -1226,7 +1228,9 @@ class Nikola(object):
                 else:
                     return link
             else:
-                return os.path.join(*path)
+                path = os.path.join(*path)
+                self.path_cache[path] = (kind, name, lang)
+                return path
         except KeyError:
             utils.LOGGER.warn("Unknown path request of kind: {0}".format(kind))
             return ""
