@@ -28,6 +28,7 @@
 
 from __future__ import print_function, unicode_literals, absolute_import
 import calendar
+import codecs
 import datetime
 import dateutil.tz
 import hashlib
@@ -47,6 +48,8 @@ import logbook
 import warnings
 import PyRSS2Gen as rss
 from collections import defaultdict, Callable
+
+import html5lib
 from logbook.more import ExceptionHandler, ColorizedStderrHandler
 from pygments.formatters import HtmlFormatter
 from zipfile import ZipFile as zipf
@@ -69,7 +72,7 @@ __all__ = ['CustomEncoder', 'get_theme_path', 'get_theme_chain', 'load_messages'
            'adjust_name_for_index_path', 'adjust_name_for_index_link',
            'NikolaPygmentsHTML', 'create_redirect', 'TreeNode',
            'flatten_tree_structure', 'parse_escaped_hierarchical_category_name',
-           'join_hierarchical_category_path']
+           'join_hierarchical_category_path', 'doc_tostring', 'save_doc']
 
 # Are you looking for 'generic_rss_renderer'?
 # It's defined in nikola.nikola.Nikola (the site object).
@@ -1617,3 +1620,19 @@ def join_hierarchical_category_path(category_path):
         return s.replace('\\', '\\\\').replace('/', '\\/')
 
     return '/'.join([escape(p) for p in category_path])
+
+
+def doc_tostring(doc, **opts):
+    """Convert a LXML doc to a string. Always returns unicode."""
+    print('======>', doc); sys.stdout.flush()
+    data = html5lib.serializer.serialize(doc, tree="lxml", **opts)
+    return data
+
+
+def save_doc(doc, dst, **opts):
+    """Serialize a LXML doc and save it in the path given by dst."""
+    dst_dir = os.path.dirname(dst)
+    makedirs(dst_dir)
+    data = doc_tostring(doc, **opts)
+    with codecs.open(dst, 'wb+', 'utf8') as outf:
+        outf.write(data)

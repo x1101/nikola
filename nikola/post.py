@@ -579,9 +579,9 @@ class Post(object):
             hyphenate(document, lang)
 
         try:
-            data = lxml.html.tostring(document.body, encoding='unicode')
+            data = utils.doc_tostring(document.body)
         except:
-            data = lxml.html.tostring(document, encoding='unicode')
+            data = utils.doc_tostring(document)
 
         if teaser_only:
             teaser = TEASER_REGEXP.split(data)[0]
@@ -604,9 +604,9 @@ class Post(object):
                 # This closes all open tags and sanitizes the broken HTML
                 document = lxml.html.fromstring(teaser)
                 try:
-                    data = lxml.html.tostring(document.body, encoding='unicode')
+                    data = utils.doc_tostring(document.body)
                 except IndexError:
-                    data = lxml.html.tostring(document, encoding='unicode')
+                    data = utils.doc_tostring(document)
 
         if data and strip_html:
             try:
@@ -621,9 +621,9 @@ class Post(object):
                 try:
                     document = lxml.html.fromstring(data)
                     demote_headers(document, self.demote_headers)
-                    data = lxml.html.tostring(document.body, encoding='unicode')
+                    data = utils.doc_tostring(document.body)
                 except (lxml.etree.ParserError, IndexError):
-                    data = lxml.html.tostring(document, encoding='unicode')
+                    data = utils.doc_tostring(document)
 
         return data
 

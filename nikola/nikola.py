@@ -974,9 +974,7 @@ class Nikola(object):
         parser = lxml.html.HTMLParser(remove_blank_text=True)
         doc = lxml.html.document_fromstring(data, parser)
         doc.rewrite_links(lambda dst: self.url_replacer(src, dst, context['lang']))
-        data = b'<!DOCTYPE html>\n' + lxml.html.tostring(doc, encoding='utf8', method='html', pretty_print=True)
-        with open(output_name, "wb+") as post_file:
-            post_file.write(data)
+        utils.save_doc(doc, output_name)
 
     def url_replacer(self, src, dst, lang=None, url_type=None):
         """URL mangler.
@@ -1131,8 +1129,7 @@ class Nikola(object):
                         try:
                             body = doc.body
                             data = (body.text or '') + ''.join(
-                                [lxml.html.tostring(child, encoding='unicode')
-                                    for child in body.iterchildren()])
+                                [utils.doc_tostring(child) for child in body.iterchildren()])
                         except IndexError:  # No body there, it happens sometimes
                             data = ''
                     except lxml.etree.ParserError as e:
@@ -1694,8 +1691,7 @@ class Nikola(object):
                     try:
                         body = doc.body
                         data = (body.text or '') + ''.join(
-                            [lxml.html.tostring(child, encoding='unicode')
-                                for child in body.iterchildren()])
+                            [utils.doc_tostring(child) for child in body.iterchildren()])
                     except IndexError:  # No body there, it happens sometimes
                         data = ''
                 except lxml.etree.ParserError as e:
