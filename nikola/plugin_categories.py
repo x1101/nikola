@@ -242,6 +242,7 @@ class PageCompiler(BasePlugin):
     friendly_name = ''
     demote_headers = False
     supports_onefile = True
+    metadata_can_be_overridden = False
     default_metadata = {
         'title': '',
         'slug': '',

@@ -41,6 +41,13 @@ from nikola.plugin_categories import PageCompiler
 from nikola.utils import unicode_str, get_logger, makedirs, write_metadata, STDERR_HANDLER
 
 
+DOCINFO_PELICAN_NIKOLA_MAPPING = {
+    'modified': 'updated',
+    'authors': 'author',
+    'summary': 'description'
+}
+
+
 class CompileRest(PageCompiler):
 
     """Compile reStructuredText into HTML."""
@@ -48,6 +55,7 @@ class CompileRest(PageCompiler):
     name = "rest"
     friendly_name = "reStructuredText"
     demote_headers = True
+    metadata_can_be_overridden = True
     logger = None
 
     def _read_extra_deps(self, post):
@@ -63,7 +71,7 @@ class CompileRest(PageCompiler):
         """Add dependency to post object to check .dep file."""
         post.add_dependency(lambda: self._read_extra_deps(post), 'fragment')
 
-    def compile_html_string(self, data, source_path=None, is_two_file=True):
+    def compile_html_string(self, data, source_path=None, is_two_file=True, return_publisher=False):
         """Compile reST into HTML strings."""
         # If errors occur, this will be added to the line number reported by
         # docutils so the line number matches the actual line number (off by
@@ -74,7 +82,10 @@ class CompileRest(PageCompiler):
             add_ln = len(m_data.splitlines()) + 1
 
         default_template_path = os.path.join(os.path.dirname(__file__), 'template.txt')
-        output, error_level, deps = rst2html(
+        # TODO cache publisher in post object (which requires a ton of
+        # refactoring, and might even need v8 and breaking tons of APIs) for
+        # speed -- right now, we are publishing each post twice
+        publisher = rst2html(
             data, settings_overrides={
                 'initial_header_level': 1,
                 'record_dependencies': True,
@@ -83,12 +94,16 @@ class CompileRest(PageCompiler):
                 'syntax_highlight': 'short',
                 'math_output': 'mathjax',
                 'template': default_template_path,
-            }, logger=self.logger, source_path=source_path, l_add_ln=add_ln, transforms=self.site.rst_transforms)
-        if not isinstance(output, unicode_str):
-            # To prevent some weird bugs here or there.
-            # Original issue: empty files.  `output` became a bytestring.
-            output = output.decode('utf-8')
-        return output, error_level, deps
+            }, logger=self.logger, source_path=source_path, l_add_ln=add_ln, transforms=self.site.rst_transforms, return_publisher=True)
+        if return_publisher:
+            return publisher
+        else:
+            output, error_level, deps = rst_document_tuple(publisher)
+            if not isinstance(output, unicode_str):
+                # To prevent some weird bugs here or there.
+                # Original issue: empty files.  `output` became a bytestring.
+                output = output.decode('utf-8')
+            return output, error_level, deps
 
     def compile_html(self, source, dest, is_two_file=True):
         """Compile source file into HTML and save as dest."""
@@ -111,6 +126,41 @@ class CompileRest(PageCompiler):
             return True
         else:
             return False
+
+    def read_metadata(self, post, file_metadata_regexp=None, unslugify_titles=False, lang=None):
+        """Read the metadata from a post, and return a metadata dict."""
+        metadata = {}
+        source = post.translated_source_path(lang)
+        with io.open(source, 'r', encoding='utf-8') as in_file:
+            data = in_file.read()
+        # This is a bit of a cheat.  The method is now abused to create a
+        # publisher and not the full document tuple.
+        publisher = self.compile_html_string(data, source, post.is_two_file, True)
+
+        # Get title.
+        title_id = publisher.document.first_child_matching_class(docutils.nodes.title)
+        if title_id is not None:
+            metadata['title'] = publisher.document.children[title_id].astext()
+
+        # Get any other metadata that is part of the reST standard docinfo
+        # (which is a special field list)
+        docinfo_id = publisher.document.first_child_matching_class(docutils.nodes.docinfo)
+        if docinfo_id is not None:
+            docinfo = publisher.document.children[docinfo_id]
+            for field in docinfo.children:
+                fieldname = field.tagname
+                if fieldname == 'authors':
+                    field.child_text_separator = ', '
+                    fieldvalue = field.astext()
+                elif fieldname == 'field':
+                    fieldname = field.children[0].astext()
+                    fieldvalue = field.children[1].astext()
+                else:
+                    fieldvalue = field.astext()
+                fieldname = fieldname.lower()
+                fieldname = DOCINFO_PELICAN_NIKOLA_MAPPING.get(fieldname, fieldname)
+                metadata[fieldname] = fieldvalue
+        return metadata
 
     def create_post(self, path, **kw):
         """Create a new post."""
@@ -237,11 +287,8 @@ def rst2html(source, source_path=None, source_class=docutils.io.StringInput,
              parser=None, parser_name='restructuredtext', writer=None,
              writer_name='html', settings=None, settings_spec=None,
              settings_overrides=None, config_section=None,
-             enable_exit_status=None, logger=None, l_add_ln=0, transforms=None):
-    """Set up & run a ``Publisher``, and return a dictionary of document parts.
-
-    Dictionary keys are the names of parts, and values are Unicode strings;
-    encoding is up to the client.  For programmatic use with string I/O.
+             enable_exit_status=None, logger=None, l_add_ln=0, transforms=None, return_publisher=False):
+    """Set up & run a ``Publisher``, and return the publisher or the document.
 
     For encoded string input, be sure to set the 'input_encoding' setting to
     the desired encoding.  Set it to 'unicode' for unencoded Unicode string
@@ -275,4 +322,15 @@ def rst2html(source, source_path=None, source_class=docutils.io.StringInput,
     pub.set_destination(None, destination_path)
     pub.publish(enable_exit_status=enable_exit_status)
 
+    if return_publisher:
+        return pub
+    else:
+        return rst_document_tuple(pub)
+
+
+def rst_document_tuple(pub):
+    """Return the document tuple (output, error level, dependencies) for a publisher.
+
+    Previously, the only output of rst2html.
+    """
     return pub.writer.parts['docinfo'] + pub.writer.parts['fragment'], pub.document.reporter.max_level, pub.settings.record_dependencies

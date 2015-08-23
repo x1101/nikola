@@ -486,7 +486,7 @@ class Post(object):
         self.compile_html(
             self.translated_source_path(lang),
             dest,
-            self.is_two_file),
+            self.is_two_file)
         if self.meta('password'):
             # TODO: get rid of this feature one day (v8?; warning added in v7.3.0.)
             LOGGER.warn("The post {0} is using the `password` attribute, which may stop working in the future.")
@@ -986,11 +986,14 @@ def get_meta(post, file_metadata_regexp=None, unslugify_titles=False, lang=None)
 
     compiler_meta = {}
 
+    compiler_meta_override = True
     if getattr(post, 'compiler', None):
         compiler_meta = post.compiler.read_metadata(post, file_metadata_regexp, unslugify_titles, lang)
         meta.update(compiler_meta)
+        if compiler_meta:
+            compiler_meta_override = post.compiler.metadata_can_be_overridden
 
-    if not post.is_two_file and not compiler_meta:
+    if not post.is_two_file and compiler_meta_override:
         # Meta file has precedence over file, which can contain garbage.
         # Moreover, we should not to talk to the file if we have compiler meta.
         meta.update(get_metadata_from_file(post.source_path, config, lang))
