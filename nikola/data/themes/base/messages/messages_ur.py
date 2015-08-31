@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 
 MESSAGES = {
     "%d min remaining to read": "%d منٹ کا مطالعہ باقی",
+    "(active)": "(فعال)",
     "Also available in:": "ان زبانوں میں بھی دستیاب:",
     "Archive": "آرکائیو",
     "Categories": "زمرے",
@@ -28,9 +29,11 @@ MESSAGES = {
     "Read more": "مزید پڑھیں",
     "Skip to main content": "مرکزی متن پر جائیں",
     "Source": "سورس",
-    "Subcategories:": "",
+    "Subcategories:": "ذیلی زمرے",
     "Tags and Categories": "ٹیگز اور زمرے",
     "Tags": "ٹیگز",
+    "Write your page here.": "اپنے صفحے کا متن یہاں لکھیں۔",
+    "Write your post here.": "اپنی تحریر یہاں لکھیں۔",
     "old posts, page %d": "پرانی تحاریر صفحہ %d",
     "page %d": "صفحہ %d",
 }

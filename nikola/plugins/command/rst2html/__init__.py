@@ -24,6 +24,8 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+"""Compile reStructuredText to HTML, using Nikola architecture."""
+
 from __future__ import unicode_literals, print_function
 
 import io
@@ -34,11 +36,13 @@ from nikola.plugin_categories import Command
 
 
 class CommandRst2Html(Command):
+
     """Compile reStructuredText to HTML, using Nikola architecture."""
 
     name = "rst2html"
     doc_usage = "infile"
     doc_purpose = "compile reStructuredText to HTML files"
+    needs_config = False
 
     def _execute(self, options, args):
         """Compile reStructuredText to standalone HTML files."""
@@ -63,6 +67,6 @@ class CommandRst2Html(Command):
         html = b'<!DOCTYPE html>\n' + lxml.html.tostring(doc, encoding='utf8', method='html', pretty_print=True)
         print(html)
         if error_level < 3:
-            exit(0)
+            return 0
         else:
-            exit(1)
+            return 1

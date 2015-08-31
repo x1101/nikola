@@ -24,14 +24,17 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+"""Build HTML fragments from metadata and text."""
+
 from copy import copy
+import os
 
 from nikola.plugin_categories import Task
-from nikola import utils
+from nikola import filters, utils
 
 
 def update_deps(post, lang, task):
-    """Updates file dependencies as they might have been updated during compilation.
+    """Update file dependencies as they might have been updated during compilation.
 
     This is done for example by the ReST page compiler, which writes its
     dependencies into a .dep file. This file is read and incorporated when calling
@@ -41,6 +44,7 @@ def update_deps(post, lang, task):
 
 
 class RenderPosts(Task):
+
     """Build HTML fragments from metadata and text."""
 
     name = "render_posts"
@@ -73,7 +77,11 @@ class RenderPosts(Task):
             deps_dict = copy(kw)
             deps_dict.pop('timeline')
             for post in kw['timeline']:
-
+                # Extra config dependencies picked from config
+                for p in post.fragment_deps(lang):
+                    if p.startswith('####MAGIC####CONFIG:'):
+                        k = p.split('####MAGIC####CONFIG:', 1)[-1]
+                        deps_dict[k] = self.site.config.get(k)
                 dest = post.translated_base_path(lang)
                 file_dep = [p for p in post.fragment_deps(lang) if not p.startswith("####MAGIC####")]
                 task = {
@@ -91,9 +99,25 @@ class RenderPosts(Task):
                     ] + post.fragment_deps_uptodate(lang),
                     'task_dep': ['render_posts:timeline_changes']
                 }
-                yield task
+
+                # Apply filters specified in the metadata
+                ff = [x.strip() for x in post.meta('filters', lang).split(',')]
+                flist = []
+                for i, f in enumerate(ff):
+                    if not f:
+                        continue
+                    if f.startswith('filters.'):  # A function from the filters module
+                        f = f[8:]
+                        try:
+                            flist.append(getattr(filters, f))
+                        except AttributeError:
+                            pass
+                    else:
+                        flist.append(f)
+                yield utils.apply_filters(task, {os.path.splitext(dest): flist})
 
     def dependence_on_timeline(self, post, lang):
+        """Check if a post depends on the timeline."""
         if "####MAGIC####TIMELINE" not in post.fragment_deps(lang):
             return True  # No dependency on timeline
         elif self.tl_changed:

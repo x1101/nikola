@@ -24,11 +24,14 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+"""Check the generated site."""
+
 from __future__ import print_function
 from collections import defaultdict
 import os
 import re
 import sys
+import time
 try:
     from urllib import unquote
     from urlparse import urlparse, urljoin, urldefrag
@@ -37,13 +40,10 @@ except ImportError:
 
 from doit.loader import generate_tasks
 import lxml.html
-try:
-    import requests
-except ImportError:
-    requests = None
+import requests
 
 from nikola.plugin_categories import Command
-from nikola.utils import get_logger, req_missing
+from nikola.utils import get_logger, STDERR_HANDLER
 
 
 def _call_nikola_list(site):
@@ -61,6 +61,7 @@ def _call_nikola_list(site):
 
 
 def real_scan_files(site):
+    """Scan for files."""
     task_fnames = set([])
     real_fnames = set([])
     output_folder = site.config['OUTPUT_FOLDER']
@@ -83,7 +84,8 @@ def real_scan_files(site):
 
 
 def fs_relpath_from_url_path(url_path):
-    """Expects as input an urlparse(s).path"""
+    """Create a filesystem relative path from an URL path."""
+    # Expects as input an urlparse(s).path
     url_path = unquote(url_path)
     # in windows relative paths don't begin with os.sep
     if sys.platform == 'win32' and len(url_path):
@@ -92,12 +94,13 @@ def fs_relpath_from_url_path(url_path):
 
 
 class CommandCheck(Command):
+
     """Check the generated site."""
 
     name = "check"
     logger = None
 
-    doc_usage = "-l [--find-sources] | -f"
+    doc_usage = "[-v] (-l [--find-sources] [-r] | -f [--clean-files])"
     doc_purpose = "check links and files in the generated site"
     cmd_options = [
         {
@@ -150,7 +153,7 @@ class CommandCheck(Command):
 
     def _execute(self, options, args):
         """Check the generated site."""
-        self.logger = get_logger('check', self.site.loghandlers)
+        self.logger = get_logger('check', STDERR_HANDLER)
 
         if not options['links'] and not options['files'] and not options['clean']:
             print(self.help())
@@ -166,12 +169,13 @@ class CommandCheck(Command):
         if options['clean']:
             failure = self.clean_files()
         if failure:
-            sys.exit(1)
+            return 1
 
     existing_targets = set([])
     checked_remote_targets = {}
 
     def analyze(self, fname, find_sources=False, check_remote=False):
+        """Analyze links on a page."""
         rv = False
         self.whitelist = [re.compile(x) for x in self.site.config['LINK_CHECK_WHITELIST']]
         base_url = urlparse(self.site.config['BASE_URL'])
@@ -183,9 +187,6 @@ class CommandCheck(Command):
         if find_sources:
             deps = _call_nikola_list(self.site)[1]
 
-        if check_remote and requests is None:
-            req_missing(['requests'], 'check remote links')
-
         if url_type in ('absolute', 'full_path'):
             url_netloc_to_root = urlparse(self.site.config['BASE_URL']).path
         try:
@@ -196,6 +197,10 @@ class CommandCheck(Command):
                 # anyone and may result in false positives.  Problems arise
                 # with galleries, for example.  Full rationale: (Issue #1447)
                 self.logger.notice("Ignoring {0} (in cache, links may be incorrect)".format(filename))
+                return False
+
+            if not os.path.exists(fname):
+                # Quietly ignore files that don’t exist; use `nikola check -f` instead (Issue #1831)
                 return False
 
             d = lxml.html.fromstring(open(filename, 'rb').read())
@@ -219,15 +224,45 @@ class CommandCheck(Command):
                     if parsed.netloc == base_url.netloc:  # absolute URL to self.site
                         continue
                     if target in self.checked_remote_targets:  # already checked this exact target
-                        if self.checked_remote_targets[target] > 399:
-                            self.logger.warn("Broken link in {0}: {1} [Error {2}]".format(filename, target, self.checked_remote_targets[target]))
+                        if self.checked_remote_targets[target] in [301, 307]:
+                            self.logger.warn("Remote link PERMANENTLY redirected in {0}: {1} [Error {2}]".format(filename, target, self.checked_remote_targets[target]))
+                        elif self.checked_remote_targets[target] in [302, 308]:
+                            self.logger.info("Remote link temporarily redirected in {1}: {2} [HTTP: {3}]".format(filename, target, self.checked_remote_targets[target]))
+                        elif self.checked_remote_targets[target] > 399:
+                            self.logger.error("Broken link in {0}: {1} [Error {2}]".format(filename, target, self.checked_remote_targets[target]))
                         continue
+
+                    # Skip whitelisted targets
+                    if any(re.search(_, target) for _ in self.whitelist):
+                        continue
+
                     # Check the remote link works
                     req_headers = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:45.0) Gecko/20100101 Firefox/45.0 (Nikola)'}  # I’m a real boy!
-                    resp = requests.head(target, headers=req_headers)
-                    self.checked_remote_targets[target] = resp.status_code
+                    resp = requests.head(target, headers=req_headers, allow_redirects=False)
+
+                    # Retry client errors (4xx) as GET requests because many servers are broken
+                    if resp.status_code >= 400 and resp.status_code <= 499:
+                        time.sleep(0.5)
+                        resp = requests.get(target, headers=req_headers, allow_redirects=False)
+
+                    # Follow redirects and see where they lead, redirects to errors will be reported twice
+                    if resp.status_code in [301, 302, 307, 308]:
+                        redir_status_code = resp.status_code
+                        time.sleep(0.5)
+                        # Known redirects are retested using GET because IIS servers otherwise get HEADaches
+                        resp = requests.get(target, headers=req_headers, allow_redirects=True)
+                        # Permanent redirects should be updated
+                        if redir_status_code in [301, 308]:
+                            self.logger.warn("Remote link moved PERMANENTLY to \"{0}\" and should be updated in {1}: {2} [HTTP: {3}]".format(resp.url, filename, target, redir_status_code))
+                        if redir_status_code in [302, 307]:
+                            self.logger.info("Remote link temporarily redirected to \"{0}\" in {1}: {2} [HTTP: {3}]".format(resp.url, filename, target, redir_status_code))
+                        self.checked_remote_targets[resp.url] = resp.status_code
+                        self.checked_remote_targets[target] = redir_status_code
+                    else:
+                        self.checked_remote_targets[target] = resp.status_code
+
                     if resp.status_code > 399:  # Error
-                        self.logger.warn("Broken link in {0}: {1} [Error {2}]".format(filename, target, resp.status_code))
+                        self.logger.error("Broken link in {0}: {1} [Error {2}]".format(filename, target, resp.status_code))
                         continue
                     elif resp.status_code <= 399:  # The address leads *somewhere* that is not an error
                         self.logger.debug("Successfully checked remote link in {0}: {1} [HTTP: {2}]".format(filename, target, resp.status_code))
@@ -236,9 +271,12 @@ class CommandCheck(Command):
                     continue
 
                 if url_type == 'rel_path':
-                    target = target.lstrip('/')
-                    target_filename = os.path.abspath(
-                        os.path.join(os.path.dirname(filename), unquote(target)))
+                    if target.startswith('/'):
+                        target_filename = os.path.abspath(
+                            os.path.join(self.site.config['OUTPUT_FOLDER'], unquote(target.lstrip('/'))))
+                    else:  # Relative path
+                        target_filename = os.path.abspath(
+                            os.path.join(os.path.dirname(filename), unquote(target)))
 
                 elif url_type in ('full_path', 'absolute'):
                     if url_type == 'absolute':
@@ -270,6 +308,7 @@ class CommandCheck(Command):
         return rv
 
     def scan_links(self, find_sources=False, check_remote=False):
+        """Check links on the site."""
         self.logger.info("Checking Links:")
         self.logger.info("===============\n")
         self.logger.notice("{0} mode".format(self.site.config['URL_TYPE']))
@@ -285,6 +324,7 @@ class CommandCheck(Command):
         return failure
 
     def scan_files(self):
+        """Check files in the site, find missing and orphaned files."""
         failure = False
         self.logger.info("Checking Files:")
         self.logger.info("===============\n")
@@ -310,7 +350,22 @@ class CommandCheck(Command):
         return failure
 
     def clean_files(self):
+        """Remove orphaned files."""
         only_on_output, _ = real_scan_files(self.site)
         for f in only_on_output:
+            self.logger.info('removed: {0}'.format(f))
             os.unlink(f)
+
+        # Find empty directories and remove them
+        output_folder = self.site.config['OUTPUT_FOLDER']
+        all_dirs = []
+        for root, dirs, files in os.walk(output_folder, followlinks=True):
+            all_dirs.append(root)
+        all_dirs.sort(key=len, reverse=True)
+        for d in all_dirs:
+            try:
+                os.rmdir(d)
+                self.logger.info('removed: {0}/'.format(d))
+            except OSError:
+                pass
         return True

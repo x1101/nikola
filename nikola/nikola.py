@@ -24,6 +24,8 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+"""The main Nikola site object."""
+
 from __future__ import print_function, unicode_literals
 import io
 from collections import defaultdict
@@ -60,8 +62,9 @@ from .plugin_categories import (
     Command,
     LateTask,
     PageCompiler,
-    RestExtension,
+    CompilerExtension,
     MarkdownExtension,
+    RestExtension,
     Task,
     TaskMultiplier,
     TemplateSystem,
@@ -85,7 +88,7 @@ DEFAULT_TRANSLATIONS_PATTERN = '{path}.{lang}.{ext}'
 
 config_changed = utils.config_changed
 
-__all__ = ['Nikola']
+__all__ = ('Nikola',)
 
 # We store legal values for some setting here.  For internal use.
 LEGAL_VALUES = {
@@ -114,7 +117,6 @@ LEGAL_VALUES = {
         'eu': 'Basque',
         'fa': 'Persian',
         'fi': 'Finnish',
-        'fil': 'Filipino',
         'fr': 'French',
         'hi': 'Hindi',
         'hr': 'Croatian',
@@ -124,6 +126,7 @@ LEGAL_VALUES = {
         'ko': 'Korean',
         'nb': 'Norwegian Bokmål',
         'nl': 'Dutch',
+        'pa': 'Punjabi',
         'pl': 'Polish',
         'pt_br': 'Portuguese (Brasil)',
         'ru': 'Russian',
@@ -132,11 +135,32 @@ LEGAL_VALUES = {
         'sr': 'Serbian (Cyrillic)',
         'sv': 'Swedish',
         ('tr', '!tr_TR'): 'Turkish',
-        'tl': 'Tagalog',
         'ur': 'Urdu',
         'uk': 'Ukrainian',
         'zh_cn': 'Chinese (Simplified)',
-        'zh_TW': 'Chinese (Taiwan)',
+    },
+    '_WINDOWS_LOCALE_GUESSES': {
+        # TODO incomplete
+        # some languages may need that the appropiate Microsoft Language Pack be instaled.
+        "bg": "Bulgarian",
+        "ca": "Catalan",
+        "de": "German",
+        "el": "Greek",
+        "en": "English",
+        "eo": "Esperanto",
+        "es": "Spanish",
+        "fa": "Farsi",  # Persian
+        "fr": "French",
+        "hr": "Croatian",
+        "it": "Italian",
+        "jp": "Japanese",
+        "nl": "Dutch",
+        "pl": "Polish",
+        "pt_br": "Portuguese_Brazil",
+        "ru": "Russian",
+        "sl_si": "Slovenian",
+        "tr_tr": "Turkish",
+        "zh_cn": "Chinese_China",  # Chinese (Simplified)
     },
     '_TRANSLATIONS_WITH_COUNTRY_SPECIFIERS': {
         # This dict is used in `init` in case of locales that exist with a
@@ -145,7 +169,6 @@ LEGAL_VALUES = {
         # will accept it, warning the user about it.
         'pt': 'pt_br',
         'zh': 'zh_cn',
-        'zh': 'zh_TW'
     },
     'RTL_LANGUAGES': ('ar', 'fa', 'ur'),
     'COLORBOX_LOCALES': defaultdict(
@@ -178,6 +201,7 @@ LEGAL_VALUES = {
         sr='sr',  # warning: this is serbian in Latin alphabet
         sv='sv',
         tr='tr',
+        uk='uk',
         zh_cn='zh-CN'
     ),
     'MOMENTJS_LOCALES': defaultdict(
@@ -241,7 +265,7 @@ LEGAL_VALUES = {
 
 
 def _enclosure(post, lang):
-    '''Default implementation of enclosures'''
+    """Add an enclosure to RSS."""
     enclosure = post.meta('enclosure', lang)
     if enclosure:
         length = 0
@@ -259,7 +283,6 @@ class Nikola(object):
 
     def __init__(self, **config):
         """Setup proper environment for running tasks."""
-
         # Register our own path handlers
         self.path_handlers = {
             'slug': self.slug_path,
@@ -275,6 +298,7 @@ class Nikola(object):
         self.posts_per_month = defaultdict(list)
         self.posts_per_tag = defaultdict(list)
         self.posts_per_category = defaultdict(list)
+        self.tags_per_language = defaultdict(list)
         self.post_per_file = {}
         self.timeline = []
         self.pages = []
@@ -282,7 +306,7 @@ class Nikola(object):
         self._template_system = None
         self._THEMES = None
         self.debug = DEBUG
-        self.loghandlers = []
+        self.loghandlers = utils.STDERR_HANDLER  # TODO remove on v8
         self.colorful = config.pop('__colorful__', False)
         self.invariant = config.pop('__invariant__', False)
         self.quiet = config.pop('__quiet__', False)
@@ -429,7 +453,7 @@ class Nikola(object):
             'TAG_PAGES_DESCRIPTIONS': {},
             'TAGLIST_MINIMUM_POSTS': 1,
             'TEMPLATE_FILTERS': {},
-            'THEME': 'bootstrap',
+            'THEME': 'bootstrap3',
             'THEME_REVEAL_CONFIG_SUBTHEME': 'sky',
             'THEME_REVEAL_CONFIG_TRANSITION': 'cube',
             'THUMBNAIL_SIZE': 180,
@@ -622,12 +646,11 @@ class Nikola(object):
         self.default_lang = self.config['DEFAULT_LANG']
         self.translations = self.config['TRANSLATIONS']
 
-        if self.configured:
-            locale_fallback, locale_default, locales = sanitized_locales(
-                self.config.get('LOCALE_FALLBACK', None),
-                self.config.get('LOCALE_DEFAULT', None),
-                self.config.get('LOCALES', {}), self.translations)
-            utils.LocaleBorg.initialize(locales, self.default_lang)
+        locale_fallback, locale_default, locales = sanitized_locales(
+            self.config.get('LOCALE_FALLBACK', None),
+            self.config.get('LOCALE_DEFAULT', None),
+            self.config.get('LOCALES', {}), self.translations)
+        utils.LocaleBorg.initialize(locales, self.default_lang)
 
         # BASE_URL defaults to SITE_URL
         if 'BASE_URL' not in self.config:
@@ -646,7 +669,7 @@ class Nikola(object):
             utils.LOGGER.error("Punycode of {}: {}".format(_bnl, _bnl.encode('idna')))
             sys.exit(1)
 
-        # todo: remove in v8
+        # TODO: remove in v8
         if not isinstance(self.config['DEPLOY_COMMANDS'], dict):
             utils.LOGGER.warn("A single list as DEPLOY_COMMANDS is deprecated.  DEPLOY_COMMANDS should be a dict, with deploy preset names as keys and lists of commands as values.")
             utils.LOGGER.warn("The key `default` is used by `nikola deploy`:")
@@ -654,7 +677,7 @@ class Nikola(object):
             utils.LOGGER.warn("DEPLOY_COMMANDS = {0}".format(self.config['DEPLOY_COMMANDS']))
             utils.LOGGER.info("(The above can be used with `nikola deploy` or `nikola deploy default`.  Multiple presets are accepted.)")
 
-        # todo: remove and change default in v8
+        # TODO: remove and change default in v8
         if 'BLOG_TITLE' in config and 'WRITE_TAG_CLOUD' not in config:
             # BLOG_TITLE is a hack, otherwise the warning would be displayed
             # when conf.py does not exist
@@ -662,9 +685,44 @@ class Nikola(object):
             utils.LOGGER.warn("Please explicitly add the setting to your conf.py with the desired value, as the setting will default to False in the future.")
 
         # We use one global tzinfo object all over Nikola.
-        self.tzinfo = dateutil.tz.gettz(self.config['TIMEZONE'])
+        try:
+            self.tzinfo = dateutil.tz.gettz(self.config['TIMEZONE'])
+        except Exception as exc:
+            utils.LOGGER.warn("Error getting TZ: {}", exc)
+            self.tzinfo = dateutil.tz.gettz()
         self.config['__tzinfo__'] = self.tzinfo
 
+        # Store raw compilers for internal use (need a copy for that)
+        self.config['_COMPILERS_RAW'] = {}
+        for k, v in self.config['COMPILERS'].items():
+            self.config['_COMPILERS_RAW'][k] = list(v)
+
+        compilers = defaultdict(set)
+        # Also add aliases for combinations with TRANSLATIONS_PATTERN
+        for compiler, exts in self.config['COMPILERS'].items():
+            for ext in exts:
+                compilers[compiler].add(ext)
+                for lang in self.config['TRANSLATIONS'].keys():
+                    candidate = utils.get_translation_candidate(self.config, "f" + ext, lang)
+                    compilers[compiler].add(candidate)
+
+        # Avoid redundant compilers
+        # Remove compilers that match nothing in POSTS/PAGES
+        # And put them in "bad compilers"
+        pp_exts = set([os.path.splitext(x[0])[1] for x in self.config['post_pages']])
+        self.config['COMPILERS'] = {}
+        self.disabled_compilers = {}
+        self.bad_compilers = set([])
+        for k, v in compilers.items():
+            if pp_exts.intersection(v):
+                self.config['COMPILERS'][k] = sorted(list(v))
+            else:
+                self.bad_compilers.add(k)
+
+        self._set_global_context()
+
+    def init_plugins(self, commands_only=False):
+        """Load plugins as needed."""
         self.plugin_manager = PluginManager(categories_filter={
             "Command": Command,
             "Task": Task,
@@ -672,13 +730,14 @@ class Nikola(object):
             "TemplateSystem": TemplateSystem,
             "PageCompiler": PageCompiler,
             "TaskMultiplier": TaskMultiplier,
-            "RestExtension": RestExtension,
+            "CompilerExtension": CompilerExtension,
             "MarkdownExtension": MarkdownExtension,
+            "RestExtension": RestExtension,
             "SignalHandler": SignalHandler,
             "ConfigPlugin": ConfigPlugin,
             "PostScanner": PostScanner,
         })
-        self.plugin_manager.setPluginInfoExtension('plugin')
+        self.plugin_manager.getPluginLocator().setPluginInfoExtension('plugin')
         extra_plugins_dirs = self.config['EXTRA_PLUGINS_DIRS']
         if sys.version_info[0] == 3:
             places = [
@@ -693,8 +752,36 @@ class Nikola(object):
                 os.path.expanduser('~/.nikola/plugins'),
             ] + [utils.sys_encode(path) for path in extra_plugins_dirs if path]
 
-        self.plugin_manager.setPluginPlaces(places)
-        self.plugin_manager.collectPlugins()
+        self.plugin_manager.getPluginLocator().setPluginPlaces(places)
+        self.plugin_manager.locatePlugins()
+        bad_candidates = set([])
+        for p in self.plugin_manager._candidates:
+            if commands_only:
+                if p[-1].details.has_option('Nikola', 'plugincategory'):
+                    # FIXME TemplateSystem should not be needed
+                    if p[-1].details.get('Nikola', 'PluginCategory') not in {'Command', 'Template'}:
+                        bad_candidates.add(p)
+            else:  # Not commands-only
+                # Remove compilers we don't use
+                if p[-1].name in self.bad_compilers:
+                    bad_candidates.add(p)
+                    self.disabled_compilers[p[-1].name] = p
+                    utils.LOGGER.debug('Not loading unneeded compiler {}', p[-1].name)
+                if p[-1].name not in self.config['COMPILERS'] and \
+                        p[-1].details.has_option('Nikola', 'plugincategory') and p[-1].details.get('Nikola', 'PluginCategory') == 'Compiler':
+                    bad_candidates.add(p)
+                    self.disabled_compilers[p[-1].name] = p
+                    utils.LOGGER.debug('Not loading unneeded compiler {}', p[-1].name)
+                # Remove blacklisted plugins
+                if p[-1].name in self.config['DISABLED_PLUGINS']:
+                    bad_candidates.add(p)
+                    utils.LOGGER.debug('Not loading disabled plugin {}', p[-1].name)
+                # Remove compiler extensions we don't need
+                if p[-1].details.has_option('Nikola', 'compiler') and p[-1].details.get('Nikola', 'compiler') in self.disabled_compilers:
+                    bad_candidates.add(p)
+                    utils.LOGGER.debug('Not loading comopiler extension {}', p[-1].name)
+        self.plugin_manager._candidates = list(set(self.plugin_manager._candidates) - bad_candidates)
+        self.plugin_manager.loadPlugins()
 
         self._activate_plugins_of_category("SignalHandler")
 
@@ -713,25 +800,28 @@ class Nikola(object):
         self._activate_plugins_of_category("LateTask")
         self._activate_plugins_of_category("TaskMultiplier")
 
-        compilers = defaultdict(set)
-        # Also add aliases for combinations with TRANSLATIONS_PATTERN
-        for compiler, exts in self.config['COMPILERS'].items():
-            for ext in exts:
-                compilers[compiler].add(ext)
-                for lang in self.config['TRANSLATIONS'].keys():
-                    candidate = utils.get_translation_candidate(self.config, "f" + ext, lang)
-                    compilers[compiler].add(candidate)
-
-        # Avoid redundant compilers
-        for k, v in compilers.items():
-            self.config['COMPILERS'][k] = sorted(list(v))
-
         # Activate all required compiler plugins
+        self.compiler_extensions = self._activate_plugins_of_category("CompilerExtension")
         for plugin_info in self.plugin_manager.getPluginsOfCategory("PageCompiler"):
             if plugin_info.name in self.config["COMPILERS"].keys():
                 self.plugin_manager.activatePluginByName(plugin_info.name)
                 plugin_info.plugin_object.set_site(self)
 
+        # Load compiler plugins
+        self.compilers = {}
+        self.inverse_compilers = {}
+
+        for plugin_info in self.plugin_manager.getPluginsOfCategory(
+                "PageCompiler"):
+            self.compilers[plugin_info.name] = \
+                plugin_info.plugin_object
+
+        self._activate_plugins_of_category("ConfigPlugin")
+
+        signal('configured').send(self)
+
+    def _set_global_context(self):
+        """Create global context from configuration."""
         self._GLOBAL_CONTEXT['url_type'] = self.config['URL_TYPE']
         self._GLOBAL_CONTEXT['timezone'] = self.tzinfo
         self._GLOBAL_CONTEXT['_link'] = self.link
@@ -800,31 +890,21 @@ class Nikola(object):
         self._GLOBAL_CONTEXT['hidden_categories'] = self.config.get('HIDDEN_CATEGORIES')
         self._GLOBAL_CONTEXT['url_replacer'] = self.url_replacer
 
+        # IPython theme configuration.  If a website has ipynb enabled in post_pages
+        # we should enable the IPython CSS (leaving that up to the theme itself).
+
+        self._GLOBAL_CONTEXT['needs_ipython_css'] = 'ipynb' in self.config['COMPILERS']
+
         self._GLOBAL_CONTEXT.update(self.config.get('GLOBAL_CONTEXT', {}))
-
-        # Load compiler plugins
-        self.compilers = {}
-        self.inverse_compilers = {}
-
-        for plugin_info in self.plugin_manager.getPluginsOfCategory(
-                "PageCompiler"):
-            self.compilers[plugin_info.name] = \
-                plugin_info.plugin_object
-
-        self._activate_plugins_of_category("ConfigPlugin")
-
-        signal('configured').send(self)
 
     def _activate_plugins_of_category(self, category):
         """Activate all the plugins of a given category and return them."""
+        # this code duplicated in tests/base.py
         plugins = []
         for plugin_info in self.plugin_manager.getPluginsOfCategory(category):
-            if plugin_info.name in self.config.get('DISABLED_PLUGINS'):
-                self.plugin_manager.removePluginFromCategory(plugin_info, category)
-            else:
-                self.plugin_manager.activatePluginByName(plugin_info.name)
-                plugin_info.plugin_object.set_site(self)
-                plugins.append(plugin_info)
+            self.plugin_manager.activatePluginByName(plugin_info.name)
+            plugin_info.plugin_object.set_site(self)
+            plugins.append(plugin_info)
         return plugins
 
     def _get_themes(self):
@@ -832,8 +912,8 @@ class Nikola(object):
             try:
                 self._THEMES = utils.get_theme_chain(self.config['THEME'])
             except Exception:
-                utils.LOGGER.warn('''Cannot load theme "{0}", using 'bootstrap' instead.'''.format(self.config['THEME']))
-                self.config['THEME'] = 'bootstrap'
+                utils.LOGGER.warn('''Cannot load theme "{0}", using 'bootstrap3' instead.'''.format(self.config['THEME']))
+                self.config['THEME'] = 'bootstrap3'
                 return self._get_themes()
             # Check consistency of USE_CDN and the current THEME (Issue #386)
             if self.config['USE_CDN'] and self.config['USE_CDN_WARNING']:
@@ -898,11 +978,11 @@ class Nikola(object):
     template_system = property(_get_template_system)
 
     def get_compiler(self, source_name):
-        """Get the correct compiler for a post from `conf.COMPILERS`
+        """Get the correct compiler for a post from `conf.COMPILERS`.
+
         To make things easier for users, the mapping in conf.py is
-        compiler->[extensions], although this is less convenient for us. The
-        majority of this function is reversing that dictionary and error
-        checking.
+        compiler->[extensions], although this is less convenient for us.
+        The majority of this function is reversing that dictionary and error checking.
         """
         ext = os.path.splitext(source_name)[1]
         try:
@@ -914,9 +994,9 @@ class Nikola(object):
                      len([ext_ for ext_ in exts if source_name.endswith(ext_)]) > 0]
             if len(langs) != 1:
                 if len(set(langs)) > 1:
-                    exit("Your file extension->compiler definition is"
-                         "ambiguous.\nPlease remove one of the file extensions"
-                         "from 'COMPILERS' in conf.py\n(The error is in"
+                    exit("Your file extension->compiler definition is "
+                         "ambiguous.\nPlease remove one of the file extensions "
+                         "from 'COMPILERS' in conf.py\n(The error is in "
                          "one of {0})".format(', '.join(langs)))
                 elif len(langs) > 1:
                     langs = langs[:1]
@@ -977,13 +1057,13 @@ class Nikola(object):
         utils.makedirs(os.path.dirname(output_name))
         parser = lxml.html.HTMLParser(remove_blank_text=True)
         doc = lxml.html.document_fromstring(data, parser)
-        doc.rewrite_links(lambda dst: self.url_replacer(src, dst, context['lang']))
+        doc.rewrite_links(lambda dst: self.url_replacer(src, dst, context['lang']), resolve_base_href=False)
         data = b'<!DOCTYPE html>\n' + lxml.html.tostring(doc, encoding='utf8', method='html', pretty_print=True)
         with open(output_name, "wb+") as post_file:
             post_file.write(data)
 
     def url_replacer(self, src, dst, lang=None, url_type=None):
-        """URL mangler.
+        """Mangle URLs.
 
         * Replaces link:// URLs with real links
         * Makes dst relative to src
@@ -1023,7 +1103,8 @@ class Nikola(object):
                         # python 3: already unicode
                         pass
                     nl = nl.encode('idna')
-
+                    if isinstance(nl, utils.bytes_str):
+                        nl = nl.decode('latin-1')  # so idna stays unchanged
                     dst = urlunsplit((dst_url.scheme,
                                       nl,
                                       dst_url.path,
@@ -1099,14 +1180,13 @@ class Nikola(object):
     def generic_rss_renderer(self, lang, title, link, description, timeline, output_path,
                              rss_teasers, rss_plain, feed_length=10, feed_url=None,
                              enclosure=_enclosure, rss_links_append_query=None):
-
-        """Takes all necessary data, and renders a RSS feed in output_path."""
+        """Take all necessary data, and render a RSS feed in output_path."""
         rss_obj = utils.ExtendedRSS2(
             title=title,
             link=link,
             description=description,
             lastBuildDate=datetime.datetime.utcnow(),
-            generator='http://getnikola.com/',
+            generator='https://getnikola.com/',
             language=lang
         )
 
@@ -1181,7 +1261,7 @@ class Nikola(object):
             rss_file.write(data)
 
     def path(self, kind, name, lang=None, is_link=False):
-        """Build the path to a certain kind of page.
+        r"""Build the path to a certain kind of page.
 
         These are mostly defined by plugins by registering via the
         register_path_handler method, except for slug, post_path, root
@@ -1211,9 +1291,8 @@ class Nikola(object):
         (ex: "/archive/index.html").
         If is_link is False, the path is relative to output and uses the
         platform's separator.
-        (ex: "archive\\index.html")
+        (ex: "archive\index.html")
         """
-
         if lang is None:
             lang = utils.LocaleBorg().current_lang
 
@@ -1236,13 +1315,13 @@ class Nikola(object):
             return ""
 
     def post_path(self, name, lang):
-        """post_path path handler"""
+        """Handle post_path paths."""
         return [_f for _f in [self.config['TRANSLATIONS'][lang],
                               os.path.dirname(name),
                               self.config['INDEX_FILE']] if _f]
 
     def root_path(self, name, lang):
-        """root_path path handler"""
+        """Handle root_path paths."""
         d = self.config['TRANSLATIONS'][lang]
         if d:
             return [d, '']
@@ -1250,7 +1329,7 @@ class Nikola(object):
             return []
 
     def slug_path(self, name, lang):
-        """slug path handler"""
+        """Handle slug paths."""
         results = [p for p in self.timeline if p.meta('slug') == name]
         if not results:
             utils.LOGGER.warning("Cannot resolve path request for slug: {0}".format(name))
@@ -1260,7 +1339,7 @@ class Nikola(object):
             return [_f for _f in results[0].permalink(lang).split('/') if _f]
 
     def filename_path(self, name, lang):
-        """filename path handler"""
+        """Handle filename paths."""
         results = [p for p in self.timeline if p.source_path == name]
         if not results:
             utils.LOGGER.warning("Cannot resolve path request for filename: {0}".format(name))
@@ -1270,15 +1349,18 @@ class Nikola(object):
             return [_f for _f in results[0].permalink(lang).split('/') if _f]
 
     def register_path_handler(self, kind, f):
+        """Register a path handler."""
         if kind in self.path_handlers:
             utils.LOGGER.warning('Conflicting path handlers for kind: {0}'.format(kind))
         else:
             self.path_handlers[kind] = f
 
     def link(self, *args):
+        """Create a link."""
         return self.path(*args, is_link=True)
 
     def abs_link(self, dst, protocol_relative=False):
+        """Get an absolute link."""
         # Normalize
         if dst:  # Mako templates and empty strings evaluate to False
             dst = urljoin(self.config['BASE_URL'], dst.lstrip('/'))
@@ -1290,6 +1372,7 @@ class Nikola(object):
         return url
 
     def rel_link(self, src, dst):
+        """Get a relative link."""
         # Normalize
         src = urljoin(self.config['BASE_URL'], src)
         dst = urljoin(src, dst)
@@ -1314,8 +1397,7 @@ class Nikola(object):
         return '/'.join(['..'] * (len(src_elems) - i - 1) + dst_elems[i:])
 
     def file_exists(self, path, not_empty=False):
-        """Returns True if the file exists. If not_empty is True,
-        it also has to be not empty."""
+        """Check if the file exists. If not_empty is True, it also must not be empty."""
         exists = os.path.exists(path)
         if exists and not_empty:
             exists = os.stat(path).st_size > 0
@@ -1329,8 +1411,9 @@ class Nikola(object):
         return task
 
     def gen_tasks(self, name, plugin_category, doc=''):
-
+        """Generate tasks."""
         def flatten(task):
+            """Flatten lists of tasks."""
             if isinstance(task, dict):
                 yield task
             else:
@@ -1365,6 +1448,7 @@ class Nikola(object):
         }
 
     def parse_category_name(self, category_name):
+        """Parse a category name into a hierarchy."""
         if self.config['CATEGORY_ALLOW_HIERARCHIES']:
             try:
                 return utils.parse_escaped_hierarchical_category_name(category_name)
@@ -1375,12 +1459,14 @@ class Nikola(object):
             return [category_name] if len(category_name) > 0 else []
 
     def category_path_to_category_name(self, category_path):
+        """Translate a category path to a category name."""
         if self.config['CATEGORY_ALLOW_HIERARCHIES']:
             return utils.join_hierarchical_category_path(category_path)
         else:
             return ''.join(category_path)
 
     def _add_post_to_category(self, post, category_name):
+        """Add a post to a category."""
         category_path = self.parse_category_name(category_name)
         current_path = []
         current_subtree = self.category_hierarchy
@@ -1392,10 +1478,12 @@ class Nikola(object):
             self.posts_per_category[self.category_path_to_category_name(current_path)].append(post)
 
     def _sort_category_hierarchy(self):
+        """Sort category hierarchy."""
         # First create a hierarchy of TreeNodes
         self.category_hierarchy_lookup = {}
 
         def create_hierarchy(cat_hierarchy, parent=None):
+            """Create category hierarchy."""
             result = []
             for name, children in cat_hierarchy.items():
                 node = utils.TreeNode(name, parent)
@@ -1414,7 +1502,7 @@ class Nikola(object):
     def scan_posts(self, really=False, ignore_quit=False, quiet=False):
         """Scan all the posts.
 
-        Ignoring quiet.
+        The `quiet` option is ignored.
         """
         if self._scanned and not really:
             return
@@ -1426,6 +1514,7 @@ class Nikola(object):
         self.posts_per_month = defaultdict(list)
         self.posts_per_tag = defaultdict(list)
         self.posts_per_category = defaultdict(list)
+        self.tags_per_language = defaultdict(list)
         self.category_hierarchy = {}
         self.post_per_file = {}
         self.timeline = []
@@ -1458,6 +1547,8 @@ class Nikola(object):
                     else:
                         slugged_tags.add(utils.slugify(tag, force=True))
                     self.posts_per_tag[tag].append(post)
+                for lang in self.config['TRANSLATIONS'].keys():
+                    self.tags_per_language[lang].extend(post.tags_for_language(lang))
                 self._add_post_to_category(post, post.meta('category'))
 
             if post.is_post:
@@ -1483,6 +1574,8 @@ class Nikola(object):
                     quit = True
                 self.post_per_file[dest] = post
                 self.post_per_file[src_dest] = post
+                # deduplicate tags_per_language
+                self.tags_per_language[lang] = list(set(self.tags_per_language[lang]))
 
         # Sort everything.
 
@@ -1502,9 +1595,9 @@ class Nikola(object):
             sys.exit(1)
         signal('scanned').send(self)
 
-    def generic_page_renderer(self, lang, post, filters):
+    def generic_page_renderer(self, lang, post, filters, context=None):
         """Render post fragments to final HTML pages."""
-        context = {}
+        context = context.copy() if context else {}
         deps = post.deps(lang) + \
             self.template_system.template_deps(post.template_name)
         deps.extend(utils.get_asset_path(x, self.THEMES) for x in ('bundles', 'parent', 'engine'))
@@ -1514,6 +1607,8 @@ class Nikola(object):
         context['title'] = post.title(lang)
         context['description'] = post.description(lang)
         context['permalink'] = post.permalink(lang)
+        if 'pagekind' not in context:
+            context['pagekind'] = ['generic_page']
         if post.use_in_feeds:
             context['enable_comments'] = True
         else:
@@ -1545,7 +1640,7 @@ class Nikola(object):
 
         task = {
             'name': os.path.normpath(output_name),
-            'file_dep': deps,
+            'file_dep': sorted(deps),
             'targets': [output_name],
             'actions': [(self.render_template, [post.template_name,
                                                 output_name, context])],
@@ -1557,9 +1652,9 @@ class Nikola(object):
 
     def generic_post_list_renderer(self, lang, posts, output_name,
                                    template_name, filters, extra_context):
-        """Renders pages with lists of posts."""
-
-        deps = self.template_system.template_deps(template_name)
+        """Render pages with lists of posts."""
+        deps = []
+        deps += self.template_system.template_deps(template_name)
         uptodate_deps = []
         for post in posts:
             deps += post.deps(lang)
@@ -1588,7 +1683,7 @@ class Nikola(object):
         task = {
             'name': os.path.normpath(output_name),
             'targets': [output_name],
-            'file_dep': deps,
+            'file_dep': sorted(deps),
             'actions': [(self.render_template, [template_name, output_name,
                                                 context])],
             'clean': True,
@@ -1599,9 +1694,10 @@ class Nikola(object):
 
     def atom_feed_renderer(self, lang, posts, output_path, filters,
                            extra_context):
-        """Renders Atom feeds and archives with lists of posts. Feeds are
-           considered archives when no future updates to them are expected"""
+        """Render Atom feeds and archives with lists of posts.
 
+        Feeds are considered archives when no future updates to them are expected.
+        """
         def atom_link(link_rel, link_type, link_href):
             link = lxml.etree.Element("link")
             link.set("rel", link_rel)
@@ -1650,7 +1746,7 @@ class Nikola(object):
         feed_id = lxml.etree.SubElement(feed_root, "id")
         feed_id.text = self.abs_link(context["feedlink"])
         feed_updated = lxml.etree.SubElement(feed_root, "updated")
-        feed_updated.text = datetime.datetime.now(tz=dateutil.tz.tzutc()).replace(microsecond=0).isoformat()
+        feed_updated.text = post.formatted_date('webiso', datetime.datetime.now(tz=dateutil.tz.tzutc()))
         feed_author = lxml.etree.SubElement(feed_root, "author")
         feed_author_name = lxml.etree.SubElement(feed_author, "name")
         feed_author_name.text = self.config["BLOG_AUTHOR"](lang)
@@ -1714,9 +1810,9 @@ class Nikola(object):
             entry_id = lxml.etree.SubElement(entry_root, "id")
             entry_id.text = post.permalink(lang, absolute=True)
             entry_updated = lxml.etree.SubElement(entry_root, "updated")
-            entry_updated.text = post.updated.isoformat()
+            entry_updated.text = post.formatted_updated('webiso')
             entry_published = lxml.etree.SubElement(entry_root, "published")
-            entry_published.text = post.date.isoformat()
+            entry_published.text = post.formatted_date('webiso')
             entry_author = lxml.etree.SubElement(entry_root, "author")
             entry_author_name = lxml.etree.SubElement(entry_author, "name")
             entry_author_name.text = post.author(lang)
@@ -1745,7 +1841,7 @@ class Nikola(object):
             atom_file.write(data)
 
     def generic_index_renderer(self, lang, posts, indexes_title, template_name, context_source, kw, basename, page_link, page_path, additional_dependencies=[]):
-        """Creates an index page.
+        """Create an index page.
 
         lang: The language
         posts: A list of posts
@@ -1800,6 +1896,8 @@ class Nikola(object):
         num_pages = len(lists)
         for i, post_list in enumerate(lists):
             context = context_source.copy()
+            if 'pagekind' not in context:
+                context['pagekind'] = ['index']
             ipages_i = utils.get_displayed_page_number(i, num_pages, self)
             if kw["indexes_pages"]:
                 indexes_pages = kw["indexes_pages"] % ipages_i
@@ -1873,8 +1971,8 @@ class Nikola(object):
                 context["feedpagecount"] = num_pages
                 atom_task = {
                     "basename": basename,
-                    "file_dep": [output_name],
                     "name": atom_output_name,
+                    "file_dep": sorted([_.base_path for _ in post_list]),
                     "targets": [atom_output_name],
                     "actions": [(self.atom_feed_renderer,
                                 (lang,
@@ -1901,11 +1999,12 @@ class Nikola(object):
             }, kw["filters"])
 
     def __repr__(self):
+        """Representation of a Nikola site."""
         return '<Nikola Site: {0!r}>'.format(self.config['BLOG_TITLE']())
 
 
 def sanitized_locales(locale_fallback, locale_default, locales, translations):
-    """Sanitizes all locales availble into a nikola session
+    """Sanitize all locales availble in Nikola.
 
     There will be one locale for each language in translations.
 
@@ -1982,10 +2081,7 @@ def sanitized_locales(locale_fallback, locale_default, locales, translations):
 
 
 def is_valid_locale(locale_n):
-    """True if locale_n is acceptable for locale.setlocale
-
-    for py2x compat locale_n should be of type str
-    """
+    """Check if locale (type str) is valid."""
     try:
         locale.setlocale(locale.LC_ALL, locale_n)
         return True
@@ -1994,7 +2090,7 @@ def is_valid_locale(locale_n):
 
 
 def valid_locale_fallback(desired_locale=None):
-    """returns a default fallback_locale, a string that locale.setlocale will accept
+    """Provide a default fallback_locale, a string that locale.setlocale will accept.
 
     If desired_locale is provided must be of type str for py2x compatibility
     """
@@ -2020,13 +2116,15 @@ def valid_locale_fallback(desired_locale=None):
 
 
 def guess_locale_from_lang_windows(lang):
-    locale_n = str(_windows_locale_guesses.get(lang, None))
+    """Guess a locale, basing on Windows language."""
+    locale_n = str(LEGAL_VALUES['_WINDOWS_LOCALE_GUESSES'].get(lang, None))
     if not is_valid_locale(locale_n):
         locale_n = None
     return locale_n
 
 
 def guess_locale_from_lang_posix(lang):
+    """Guess a locale, basing on POSIX system language."""
     # compatibility v6.0.4
     if is_valid_locale(str(lang)):
         locale_n = str(lang)
@@ -2053,28 +2151,3 @@ def workaround_empty_LC_ALL_posix():
             os.environ['LC_ALL'] = lc_time
     except Exception:
         pass
-
-
-_windows_locale_guesses = {
-    # some languages may need that the appropiate Microsoft's Language Pack
-    # be instaled; the 'str' bit will be added in the guess function
-    "bg": "Bulgarian",
-    "ca": "Catalan",
-    "de": "German",
-    "el": "Greek",
-    "en": "English",
-    "eo": "Esperanto",
-    "es": "Spanish",
-    "fa": "Farsi",  # Persian
-    "fr": "French",
-    "hr": "Croatian",
-    "it": "Italian",
-    "jp": "Japanese",
-    "nl": "Dutch",
-    "pl": "Polish",
-    "pt_br": "Portuguese_Brazil",
-    "ru": "Russian",
-    "sl_si": "Slovenian",
-    "tr_tr": "Turkish",
-    "zh_cn": "Chinese_China",  # Chinese (Simplified)
-}

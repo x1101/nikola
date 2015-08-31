@@ -3,19 +3,19 @@ Nikola, a Static Site and Blog Generator
 
 In goes content, out comes a website, ready to deploy.
 
-.. image:: http://img.shields.io/pypi/v/Nikola.png
+.. image:: http://img.shields.io/pypi/v/Nikola.svg
    :target: https://pypi.python.org/pypi/Nikola
 
-.. image:: https://requires.io/github/getnikola/nikola/requirements.png?branch=master
-     :target: https://requires.io/github/getnikola/nikola/requirements/?branch=master
+.. image:: https://img.shields.io/requires/github/getnikola/nikola.svg
+   :target: https://requires.io/github/getnikola/nikola/requirements/?branch=master
 
-.. image:: http://img.shields.io/travis/getnikola/nikola.png
+.. image:: http://img.shields.io/travis/getnikola/nikola.svg
    :target: https://travis-ci.org/getnikola/nikola
 
 .. image:: http://img.shields.io/coveralls/getnikola/nikola.png
   :target: https://coveralls.io/r/getnikola/nikola?branch=master
 
-.. image:: http://img.shields.io/badge/license-MIT-green.png
+.. image:: http://img.shields.io/badge/license-MIT-green.svg
    :target: https://github.com/getnikola/nikola/blob/master/LICENSE.txt
 
 Why Static Websites?
@@ -65,10 +65,10 @@ Assuming you have pip installed::
 
 For optional features::
 
-    pip install Nikola[extras]
+    pip install "Nikola[extras]"
 
 For tests (see tests/README.rst for more details)::
 
-    pip install Nikola[extras,tests]
+    pip install "Nikola[extras,tests]"
 
 For more information, see https://getnikola.com/

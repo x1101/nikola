@@ -24,6 +24,8 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+"""Render the blog indexes."""
+
 from __future__ import unicode_literals
 from collections import defaultdict
 import os
@@ -33,16 +35,19 @@ from nikola import utils
 
 
 class Indexes(Task):
+
     """Render the blog indexes."""
 
     name = "render_indexes"
 
     def set_site(self, site):
+        """Set Nikola site."""
         site.register_path_handler('index', self.index_path)
         site.register_path_handler('index_atom', self.index_atom_path)
         return super(Indexes, self).set_site(site)
 
     def gen_tasks(self):
+        """Render the blog indexes."""
         self.site.scan_posts()
         yield self.group_task()
 
@@ -80,7 +85,10 @@ class Indexes(Task):
             indexes_title = kw['indexes_title'](lang) or kw['blog_title'](lang)
             self.number_of_pages[lang] = (len(filtered_posts) + kw['index_display_post_count'] - 1) // kw['index_display_post_count']
 
-            yield self.site.generic_index_renderer(lang, filtered_posts, indexes_title, template_name, {}, kw, 'render_indexes', page_link, page_path)
+            context = {}
+            context["pagekind"] = ["index"]
+
+            yield self.site.generic_index_renderer(lang, filtered_posts, indexes_title, template_name, context, kw, 'render_indexes', page_link, page_path)
 
         if not self.site.config["STORY_INDEX"]:
             return
@@ -93,13 +101,17 @@ class Indexes(Task):
             "strip_indexes": self.site.config['STRIP_INDEXES'],
         }
         template_name = "list.tmpl"
+        index_len = len(kw['index_file'])
         for lang in kw["translations"]:
             # Need to group by folder to avoid duplicated tasks (Issue #758)
                 # Group all pages by path prefix
                 groups = defaultdict(list)
                 for p in self.site.timeline:
                     if not p.is_post:
-                        dirname = os.path.dirname(p.destination_path(lang))
+                        destpath = p.destination_path(lang)
+                        if destpath[-(1 + index_len):] == '/' + kw['index_file']:
+                            destpath = destpath[:-(1 + index_len)]
+                        dirname = os.path.dirname(destpath)
                         groups[dirname].append(p)
                 for dirname, post_list in groups.items():
                     context = {}
@@ -108,10 +120,12 @@ class Indexes(Task):
                     output_name = os.path.join(kw['output_folder'], dirname, kw['index_file'])
                     short_destination = os.path.join(dirname, kw['index_file'])
                     link = short_destination.replace('\\', '/')
-                    index_len = len(kw['index_file'])
                     if kw['strip_indexes'] and link[-(1 + index_len):] == '/' + kw['index_file']:
                         link = link[:-index_len]
                     context["permalink"] = link
+                    context["pagekind"] = ["list"]
+                    if dirname == "/":
+                        context["pagekind"].append("front_page")
 
                     for post in post_list:
                         # If there is an index.html pending to be created from
@@ -133,6 +147,7 @@ class Indexes(Task):
                         yield task
 
     def index_path(self, name, lang, is_feed=False):
+        """Return path to an index."""
         extension = None
         if is_feed:
             extension = ".atom"
@@ -149,4 +164,5 @@ class Indexes(Task):
                                                      extension=extension)
 
     def index_atom_path(self, name, lang):
+        """Return path to an Atom index."""
         return self.index_path(name, lang, is_feed=True)

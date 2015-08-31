@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 
 MESSAGES = {
     "%d min remaining to read": "पढ़ने में %d मिनट बाकी",
+    "(active)": "",
     "Also available in:": "उपलब्ध भाषाएँ:",
     "Archive": "आर्काइव",
     "Categories": "श्रेणियाँ",
@@ -31,6 +32,8 @@ MESSAGES = {
     "Subcategories:": "",
     "Tags and Categories": "टैग्स और श्रेणियाँ",
     "Tags": "टैग्स",
+    "Write your page here.": "",
+    "Write your post here.": "",
     "old posts, page %d": "पुरानी पोस्टें, पृष्‍ठ %d",
     "page %d": "पृष्‍ठ %d",
 }

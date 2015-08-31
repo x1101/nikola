@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 
 MESSAGES = {
     "%d min remaining to read": "%d dakikalık okuma",
+    "(active)": "",
     "Also available in:": "Şu dilde de mevcut:",
     "Archive": "Arşiv",
     "Categories": "Kategoriler",
@@ -31,6 +32,8 @@ MESSAGES = {
     "Subcategories:": "",
     "Tags and Categories": "Etiketler ve Kategoriler",
     "Tags": "Etiketler",
+    "Write your page here.": "",
+    "Write your post here.": "",
     "old posts, page %d": "eski yazılar, sayfa %d",
     "page %d": "sayfa %d",
 }

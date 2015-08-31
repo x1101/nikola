@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 
 MESSAGES = {
     "%d min remaining to read": "%d min zbývajících",
+    "(active)": "",
     "Also available in:": "Dostupné také v",
     "Archive": "Archiv",
     "Categories": "Kategorie",
@@ -31,6 +32,8 @@ MESSAGES = {
     "Subcategories:": "",
     "Tags and Categories": "Štítky a kategorie",
     "Tags": "Štítky",
+    "Write your page here.": "",
+    "Write your post here.": "",
     "old posts, page %d": "staré příspěvky, strana %d",
     "page %d": "strana %d",
 }

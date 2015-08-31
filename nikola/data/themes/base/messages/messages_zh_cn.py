@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 
 MESSAGES = {
     "%d min remaining to read": "",
+    "(active)": "",
     "Also available in:": "其他语言版本：",
     "Archive": "文章存档",
     "Categories": "分类",
@@ -31,6 +32,8 @@ MESSAGES = {
     "Subcategories:": "",
     "Tags and Categories": "标签和分类",
     "Tags": "标签",
+    "Write your page here.": "",
+    "Write your post here.": "",
     "old posts, page %d": "旧文章页 %d",
     "page %d": "",
 }

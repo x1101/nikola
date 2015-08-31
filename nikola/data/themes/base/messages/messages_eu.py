@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 
 MESSAGES = {
     "%d min remaining to read": "",
+    "(active)": "",
     "Also available in:": "Eskuragarria hemen ere:",
     "Archive": "Artxiboa",
     "Categories": "Kategoriak",
@@ -31,6 +32,8 @@ MESSAGES = {
     "Subcategories:": "",
     "Tags and Categories": "Etiketak eta Kategoriak",
     "Tags": "Etiketak",
+    "Write your page here.": "",
+    "Write your post here.": "",
     "old posts, page %d": "Post zaharren, orria %d",
     "page %d": "orria %d",
 }

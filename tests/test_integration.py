@@ -105,6 +105,9 @@ class DemoBuildTest(EmptyBuildTest):
         """Fill the site with demo content."""
         self.init_command.copy_sample_site(self.target_dir)
         self.init_command.create_configuration(self.target_dir)
+        src1 = os.path.join(os.path.dirname(__file__), 'data', '1-nolinks.rst')
+        dst1 = os.path.join(self.target_dir, 'posts', '1.rst')
+        shutil.copy(src1, dst1)
         # File for Issue #374 (empty post text)
         with io.open(os.path.join(self.target_dir, 'posts', 'empty.txt'), "w+", encoding="utf8") as outf:
             outf.write(
@@ -526,6 +529,9 @@ class InvariantBuildTest(EmptyBuildTest):
         """Fill the site with demo content."""
         self.init_command.copy_sample_site(self.target_dir)
         self.init_command.create_configuration(self.target_dir)
+        src1 = os.path.join(os.path.dirname(__file__), 'data', '1-nolinks.rst')
+        dst1 = os.path.join(self.target_dir, 'posts', '1.rst')
+        shutil.copy(src1, dst1)
         os.system('rm "{0}/stories/creating-a-theme.rst" "{0}/stories/extending.txt" "{0}/stories/internals.txt" "{0}/stories/manual.rst" "{0}/stories/social_buttons.txt" "{0}/stories/theming.rst" "{0}/stories/upgrading-to-v6.txt"'.format(self.target_dir))
 
     def test_invariance(self):
@@ -543,6 +549,51 @@ class InvariantBuildTest(EmptyBuildTest):
                 print('Unexplained diff for the invariance test. (-canonical +built)')
                 print(exc.output.decode('utf-8'))
                 self.assertEqual(exc.returncode, 0, 'Unexplained diff for the invariance test.')
+
+
+class RedirectionsTest1(TestCheck):
+    """Check REDIRECTIONS"""
+
+    @classmethod
+    def patch_site(self):
+        """"""
+        conf_path = os.path.join(self.target_dir, "conf.py")
+        with io.open(conf_path, "a", encoding="utf8") as outf:
+            outf.write("""\n\nREDIRECTIONS = [ ("posts/foo.html", "/foo/bar.html"), ]\n\n""")
+
+    @classmethod
+    def fill_site(self):
+        target_path = os.path.join(self.target_dir, "files", "foo", "bar.html")
+        nikola.utils.makedirs(os.path.join(self.target_dir, "files", "foo"))
+        with io.open(target_path, "w+", encoding="utf8") as outf:
+            outf.write("foo")
+
+class RedirectionsTest2(TestCheck):
+    """Check external REDIRECTIONS"""
+
+    @classmethod
+    def patch_site(self):
+        """"""
+        conf_path = os.path.join(self.target_dir, "conf.py")
+        with io.open(conf_path, "a", encoding="utf8") as outf:
+            outf.write("""\n\nREDIRECTIONS = [ ("foo.html", "http://www.example.com/"), ]\n\n""")
+
+class RedirectionsTest3(TestCheck):
+    """Check relative REDIRECTIONS"""
+
+    @classmethod
+    def patch_site(self):
+        """"""
+        conf_path = os.path.join(self.target_dir, "conf.py")
+        with io.open(conf_path, "a", encoding="utf8") as outf:
+            outf.write("""\n\nREDIRECTIONS = [ ("foo.html", "foo/bar.html"), ]\n\n""")
+
+    @classmethod
+    def fill_site(self):
+        target_path = os.path.join(self.target_dir, "files", "foo", "bar.html")
+        nikola.utils.makedirs(os.path.join(self.target_dir, "files", "foo"))
+        with io.open(target_path, "w+", encoding="utf8") as outf:
+            outf.write("foo")
 
 
 if __name__ == "__main__":

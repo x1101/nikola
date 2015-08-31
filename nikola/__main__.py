@@ -24,7 +24,10 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+"""The main function of Nikola."""
+
 from __future__ import print_function, unicode_literals
+from collections import defaultdict
 import os
 import shutil
 try:
@@ -48,7 +51,7 @@ from blinker import signal
 from . import __version__
 from .plugin_categories import Command
 from .nikola import Nikola
-from .utils import sys_decode, sys_encode, get_root_dir, req_missing, LOGGER, STRICT_HANDLER, ColorfulStderrHandler
+from .utils import sys_decode, sys_encode, get_root_dir, req_missing, LOGGER, STRICT_HANDLER, STDERR_HANDLER, ColorfulStderrHandler
 
 if sys.version_info[0] == 3:
     import importlib.machinery
@@ -62,6 +65,7 @@ _RETURN_DOITNIKOLA = False
 
 
 def main(args=None):
+    """Run Nikola."""
     colorful = False
     if sys.stderr.isatty() and os.name != 'nt':
         colorful = True
@@ -87,13 +91,18 @@ def main(args=None):
             break
 
     quiet = False
+    strict = False
     if len(args) > 0 and args[0] == 'build' and '--strict' in args:
         LOGGER.notice('Running in strict mode')
         STRICT_HANDLER.push_application()
+        strict = True
     if len(args) > 0 and args[0] == 'build' and '-q' in args or '--quiet' in args:
-        nullhandler = NullHandler()
-        nullhandler.push_application()
+        NullHandler().push_application()
         quiet = True
+    if not quiet and not strict:
+        NullHandler().push_application()
+        STDERR_HANDLER[0].push_application()
+
     global config
 
     original_cwd = os.getcwd()
@@ -107,8 +116,8 @@ def main(args=None):
         root = get_root_dir()
         if root:
             os.chdir(root)
-        # help does not need a config file, but can use one.
-        needs_config_file = argname != 'help'
+        # Help and imports don't require config, but can use one if it exists
+        needs_config_file = (argname != 'help') and not argname.startswith('import_')
     else:
         needs_config_file = False
 
@@ -124,10 +133,10 @@ def main(args=None):
         if os.path.exists(conf_filename):
             msg = traceback.format_exc(0)
             LOGGER.error('"{0}" cannot be parsed.\n{1}'.format(conf_filename, msg))
-            sys.exit(1)
+            return 1
         elif needs_config_file and conf_filename_changed:
             LOGGER.error('Cannot find configuration file "{0}".'.format(conf_filename))
-            sys.exit(1)
+            return 1
         config = {}
 
     if conf_filename_changed:
@@ -154,7 +163,6 @@ def main(args=None):
     config['__quiet__'] = quiet
     config['__configuration_filename__'] = conf_filename
     config['__cwd__'] = original_cwd
-
     site = Nikola(**config)
     DN = DoitNikola(site, quiet)
     if _RETURN_DOITNIKOLA:
@@ -167,11 +175,12 @@ def main(args=None):
 
 
 class Help(DoitHelp):
-    """show Nikola usage."""
+
+    """Show Nikola usage."""
 
     @staticmethod
     def print_usage(cmds):
-        """print nikola "usage" (basic help) instructions"""
+        """Print nikola "usage" (basic help) instructions."""
         # Remove 'run'.  Nikola uses 'build', though we support 'run' for
         # people used to it (eg. doit users).
         # WARNING: 'run' is the vanilla doit command, without support for
@@ -190,8 +199,11 @@ class Help(DoitHelp):
 
 
 class Build(DoitRun):
-    """expose "run" command as "build" for backward compatibility"""
+
+    """Expose "run" command as "build" for backwards compatibility."""
+
     def __init__(self, *args, **kw):
+        """Initialize Build."""
         opts = list(self.cmd_options)
         opts.append(
             {
@@ -226,9 +238,11 @@ class Build(DoitRun):
 
 
 class Clean(DoitClean):
-    """A clean that removes cache/"""
+
+    """Clean site, including the cache directory."""
 
     def clean_tasks(self, tasks, dryrun):
+        """Clean tasks."""
         if not dryrun and config:
             cache_folder = config.get('CACHE_FOLDER', 'cache')
             if os.path.exists(cache_folder):
@@ -241,12 +255,16 @@ DoitAuto.name = 'doit_auto'
 
 
 class NikolaTaskLoader(TaskLoader):
-    """custom task loader to get tasks from Nikola instead of dodo.py file"""
+
+    """Nikola-specific task loader."""
+
     def __init__(self, nikola, quiet=False):
+        """Initialize the loader."""
         self.nikola = nikola
         self.quiet = quiet
 
     def load_tasks(self, cmd, opt_values, pos_args):
+        """Load Nikola tasks."""
         if self.quiet:
             DOIT_CONFIG = {
                 'verbosity': 0,
@@ -270,17 +288,22 @@ class NikolaTaskLoader(TaskLoader):
 
 
 class DoitNikola(DoitMain):
+
+    """Nikola-specific implementation of DoitMain."""
+
     # overwite help command
     DOIT_CMDS = list(DoitMain.DOIT_CMDS) + [Help, Build, Clean, DoitAuto]
     TASK_LOADER = NikolaTaskLoader
 
     def __init__(self, nikola, quiet=False):
+        """Initialzie DoitNikola."""
         super(DoitNikola, self).__init__()
         self.nikola = nikola
         nikola.doit = self
         self.task_loader = self.TASK_LOADER(nikola, quiet)
 
     def get_cmds(self):
+        """Get commands."""
         # core doit commands
         cmds = DoitMain.get_cmds(self)
         # load nikola commands
@@ -289,7 +312,7 @@ class DoitNikola(DoitMain):
         return cmds
 
     def run(self, cmd_args):
-        sub_cmds = self.get_cmds()
+        """Run Nikola."""
         args = self.process_args(cmd_args)
         args = [sys_decode(arg) for arg in args]
 
@@ -311,23 +334,70 @@ class DoitNikola(DoitMain):
                 if arg not in ('--help', '-h'):
                     args.append(arg)
 
+        if args[0] == 'help':
+            self.nikola.init_plugins(commands_only=True)
+        else:
+            self.nikola.init_plugins()
+
+        sub_cmds = self.get_cmds()
+
         if any(arg in ("--version", '-V') for arg in args):
             cmd_args = ['version']
             args = ['version']
         if args[0] not in sub_cmds.keys():
             LOGGER.error("Unknown command {0}".format(args[0]))
+            sugg = defaultdict(list)
+            sub_filtered = (i for i in sub_cmds.keys() if i != 'run')
+            for c in sub_filtered:
+                d = levenshtein(c, args[0])
+                sugg[d].append(c)
+            if sugg.keys():
+                best_sugg = sugg[min(sugg.keys())]
+                if len(best_sugg) == 1:
+                    LOGGER.info('Did you mean "{}"?'.format(best_sugg[0]))
+                else:
+                    LOGGER.info('Did you mean "{}" or "{}"?'.format('", "'.join(best_sugg[:-1]), best_sugg[-1]))
             return 3
+
         if sub_cmds[args[0]] is not Help and not isinstance(sub_cmds[args[0]], Command):  # Is a doit command
             if not self.nikola.configured:
                 LOGGER.error("This command needs to run inside an "
                              "existing Nikola site.")
                 return 3
-
         return super(DoitNikola, self).run(cmd_args)
 
     @staticmethod
     def print_version():
+        """Print Nikola version."""
         print("Nikola v" + __version__)
+
+
+def levenshtein(s1, s2):
+    u"""Calculate the Levenshtein distance of two strings.
+
+    Implementation from Wikibooks:
+    https://en.wikibooks.org/w/index.php?title=Algorithm_Implementation/Strings/Levenshtein_distance&oldid=2974448#Python
+    Copyright © The Wikibooks contributors (CC BY-SA/fair use citation); edited to match coding style and add an exception.
+    """
+    if len(s1) < len(s2):
+        return levenshtein(s2, s1)
+
+    # len(s1) >= len(s2)
+    if len(s2) == 0:
+        return len(s1)
+
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            # j+1 instead of j since previous_row and current_row are one character longer than s2
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+
+    return previous_row[-1]
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

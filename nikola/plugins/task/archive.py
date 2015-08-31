@@ -24,6 +24,9 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+"""Render the post archives."""
+
+import copy
 import os
 
 # for tearDown with _reload we cannot use 'import from' to access LocaleBorg
@@ -34,17 +37,20 @@ from nikola.utils import config_changed, adjust_name_for_index_path, adjust_name
 
 
 class Archive(Task):
+
     """Render the post archives."""
 
     name = "render_archive"
 
     def set_site(self, site):
+        """Set Nikola site."""
         site.register_path_handler('archive', self.archive_path)
         site.register_path_handler('archive_atom', self.archive_atom_path)
         return super(Archive, self).set_site(site)
 
     def _prepare_task(self, kw, name, lang, posts, items, template_name,
                       title, deps_translatable=None):
+        """Prepare an archive task."""
         # name: used to build permalink and destination
         # posts, items: posts or items; only one of them should be used,
         #               the other be None
@@ -52,17 +58,20 @@ class Archive(Task):
         # title: the (translated) title for the generated page
         # deps_translatable: dependencies (None if not added)
         assert posts is not None or items is not None
-
+        task_cfg = [copy.copy(kw)]
         context = {}
         context["lang"] = lang
         context["title"] = title
         context["permalink"] = self.site.link("archive", name, lang)
+        context["pagekind"] = ["list", "archive_page"]
         if posts is not None:
             context["posts"] = posts
-            n = len(posts)
+            # Depend on all post metadata because it can be used in templates (Issue #1931)
+            task_cfg.append([repr(p) for p in posts])
         else:
+            # Depend on the content of items, to rebuild if links change (Issue #1931)
             context["items"] = items
-            n = len(items)
+            task_cfg.append(items)
         task = self.site.generic_post_list_renderer(
             lang,
             [],
@@ -72,7 +81,7 @@ class Archive(Task):
             context,
         )
 
-        task_cfg = {1: kw, 2: n}
+        task_cfg = {i: x for i, x in enumerate(task_cfg)}
         if deps_translatable is not None:
             task_cfg[3] = deps_translatable
         task['uptodate'] = task['uptodate'] + [config_changed(task_cfg, 'nikola.plugins.task.archive')]
@@ -80,6 +89,7 @@ class Archive(Task):
         return task
 
     def _generate_posts_task(self, kw, name, lang, posts, title, deps_translatable=None):
+        """Genereate a task for an archive with posts."""
         posts = sorted(posts, key=lambda a: a.date)
         posts.reverse()
         if kw['archives_are_indexes']:
@@ -96,13 +106,15 @@ class Archive(Task):
             uptodate = []
             if deps_translatable is not None:
                 uptodate += [config_changed(deps_translatable, 'nikola.plugins.task.archive')]
+            context = {"archive_name": name,
+                       "is_feed_stale": kw["is_feed_stale"],
+                       "pagekind": ["index", "archive_page"]}
             yield self.site.generic_index_renderer(
                 lang,
                 posts,
                 title,
                 "archiveindex.tmpl",
-                {"archive_name": name,
-                 "is_feed_stale": kw["is_feed_stale"]},
+                context,
                 kw,
                 str(self.name),
                 page_link,
@@ -112,6 +124,7 @@ class Archive(Task):
             yield self._prepare_task(kw, name, lang, posts, None, "list_post.tmpl", title, deps_translatable)
 
     def gen_tasks(self):
+        """Generate archive tasks."""
         kw = {
             "messages": self.site.MESSAGES,
             "translations": self.site.config['TRANSLATIONS'],
@@ -200,6 +213,8 @@ class Archive(Task):
 
         if not kw['create_single_archive'] and not kw['create_full_archives']:
             # And an "all your years" page for yearly and monthly archives
+            if "is_feed_stale" in kw:
+                del kw["is_feed_stale"]
             years = list(self.site.posts_per_year.keys())
             years.sort(reverse=True)
             kw['years'] = years
@@ -208,6 +223,7 @@ class Archive(Task):
                 yield self._prepare_task(kw, None, lang, None, items, "list.tmpl", kw["messages"][lang]["Archive"])
 
     def archive_path(self, name, lang, is_feed=False):
+        """Return archive paths."""
         if is_feed:
             extension = ".atom"
             archive_file = os.path.splitext(self.site.config['ARCHIVE_FILENAME'])[0] + extension
@@ -225,4 +241,5 @@ class Archive(Task):
                                   archive_file] if _f]
 
     def archive_atom_path(self, name, lang):
+        """Return Atom archive paths."""
         return self.archive_path(name, lang, is_feed=True)
