@@ -56,7 +56,6 @@ from math import ceil
 # for tearDown with _reload we cannot use 'from import' to get forLocaleBorg
 import nikola.utils
 from .utils import (
-    bytes_str,
     current_time,
     Functionary,
     LOGGER,
@@ -130,7 +129,6 @@ class Post(object):
         self._template_name = template_name
         self.is_two_file = True
         self.newstylemeta = True
-        self.hyphenate = self.config['HYPHENATE']
         self._reading_time = None
         self._remaining_reading_time = None
         self._paragraph_count = None
@@ -232,6 +230,11 @@ class Post(object):
         # Register potential extra dependencies
         self.compiler.register_extra_dependencies(self)
 
+    def _get_hyphenate(self):
+        return bool(self.config['HYPHENATE'] or self.meta('hyphenate'))
+
+    hyphenate = property(_get_hyphenate)
+
     def __repr__(self):
         """Provide a representation of the post object."""
         # Calculate a hash that represents most data about the post
@@ -324,19 +327,7 @@ class Post(object):
 
     def formatted_date(self, date_format, date=None):
         """Return the formatted date as unicode."""
-        date = date if date else self.date
-
-        if date_format == 'webiso':
-            # Formatted after RFC 3339 (web ISO 8501 profile) with Zulu
-            # zone desgignator for times in UTC and no microsecond precision.
-            fmt_date = date.replace(microsecond=0).isoformat().replace('+00:00', 'Z')
-        else:
-            fmt_date = date.strftime(date_format)
-
-        # Issue #383, this changes from py2 to py3
-        if isinstance(fmt_date, bytes_str):
-            fmt_date = fmt_date.decode('utf8')
-        return fmt_date
+        return utils.LocaleBorg().formatted_date(date_format, date if date else self.date)
 
     def formatted_updated(self, date_format):
         """Return the updated date as unicode."""
@@ -447,11 +438,16 @@ class Post(object):
         if self.default_lang in self.translated_to:
             deps.append(self.base_path)
             deps.append(self.source_path)
+            if os.path.exists(self.metadata_path):
+                deps.append(self.metadata_path)
         if lang != self.default_lang:
             cand_1 = get_translation_candidate(self.config, self.source_path, lang)
             cand_2 = get_translation_candidate(self.config, self.base_path, lang)
             if os.path.exists(cand_1):
                 deps.extend([cand_1, cand_2])
+            cand_3 = get_translation_candidate(self.config, self.metadata_path, lang)
+            if os.path.exists(cand_3):
+                deps.append(cand_3)
         deps += self._get_dependencies(self._dependency_file_page[lang])
         deps += self._get_dependencies(self._dependency_file_page[None])
         return sorted(deps)
@@ -558,13 +554,13 @@ class Post(object):
             return get_translation_candidate(self.config, self.base_path, sorted(self.translated_to)[0])
 
     def text(self, lang=None, teaser_only=False, strip_html=False, show_read_more_link=True,
-             rss_read_more_link=False, rss_links_append_query=None):
+             feed_read_more_link=False, feed_links_append_query=None):
         """Read the post file for that language and return its contents.
 
         teaser_only=True breaks at the teaser marker and returns only the teaser.
         strip_html=True removes HTML tags
         show_read_more_link=False does not add the Read more... link
-        rss_read_more_link=True uses RSS_READ_MORE_LINK instead of INDEX_READ_MORE_LINK
+        feed_read_more_link=True uses FEED_READ_MORE_LINK instead of INDEX_READ_MORE_LINK
         lang=None uses the last used to set locale
 
         All links in the returned HTML will be relative.
@@ -613,9 +609,9 @@ class Post(object):
                         teaser_text = teaser_regexp.search(data).groups()[-1]
                     else:
                         teaser_text = self.messages[lang]["Read more"]
-                    l = self.config['RSS_READ_MORE_LINK'](lang) if rss_read_more_link else self.config['INDEX_READ_MORE_LINK'](lang)
+                    l = self.config['FEED_READ_MORE_LINK'](lang) if feed_read_more_link else self.config['INDEX_READ_MORE_LINK'](lang)
                     teaser += l.format(
-                        link=self.permalink(lang, query=rss_links_append_query),
+                        link=self.permalink(lang, query=feed_links_append_query),
                         read_more=teaser_text,
                         min_remaining_read=self.messages[lang]["%d min remaining to read"] % (self.remaining_reading_time),
                         reading_time=self.reading_time,
@@ -715,10 +711,9 @@ class Post(object):
     def source_link(self, lang=None):
         """Return absolute link to the post's source."""
         ext = self.source_ext(True)
-        return "/" + self.destination_path(
-            lang=lang,
-            extension=ext,
-            sep='/')
+        link = "/" + self.destination_path(lang=lang, extension=ext, sep='/')
+        link = utils.encodelink(link)
+        return link
 
     def destination_path(self, lang=None, extension='.html', sep=os.sep):
         """Destination path for this post, relative to output/.
@@ -739,6 +734,61 @@ class Post(object):
         if path.startswith('./'):
             path = path[2:]
         return path
+
+    def section_color(self, lang=None):
+        """Return the color of the post's section."""
+        slug = self.section_slug(lang)
+        if slug in self.config['POSTS_SECTION_COLORS'](lang):
+            return self.config['POSTS_SECTION_COLORS'](lang)[slug]
+        base = self.config['THEME_COLOR']
+        return utils.colorize_str_from_base_color(slug, base)
+
+    def section_link(self, lang=None):
+        """Return the link to the post's section (deprecated)."""
+        utils.LOGGER.warning("Post.section_link is deprecated. Please use " +
+                             "site.link('index_section_path', post.section_slug()) instead.")
+        if lang is None:
+            lang = nikola.utils.LocaleBorg().current_lang
+
+        slug = self.section_slug(lang)
+        t = os.path.normpath(self.translations[lang])
+        if t == '.':
+            t = ''
+        link = '/' + '/'.join(i for i in (t, slug) if i) + '/'
+        if not self.pretty_urls:
+            link = urljoin(link, self.index_file)
+        link = utils.encodelink(link)
+        return link
+
+    def section_name(self, lang=None):
+        """Return the name of the post's section."""
+        slug = self.section_slug(lang)
+        if slug in self.config['POSTS_SECTION_NAME'](lang):
+            name = self.config['POSTS_SECTION_NAME'](lang)[slug]
+        else:
+            name = slug.replace('-', ' ').title()
+        return name
+
+    def section_slug(self, lang=None):
+        """Return the slug for the post's section."""
+        if lang is None:
+            lang = nikola.utils.LocaleBorg().current_lang
+
+        if not self.config['POSTS_SECTION_FROM_META']:
+            dest = self.destination_path(lang)
+            if dest[-(1 + len(self.index_file)):] == os.sep + self.index_file:
+                dest = dest[:-(1 + len(self.index_file))]
+            dirname = os.path.dirname(dest)
+            slug = dest.split(os.sep)
+            if not slug or dirname == '.':
+                slug = self.messages[lang]["Uncategorized"]
+            elif lang == slug[0]:
+                slug = slug[1]
+            else:
+                slug = slug[0]
+        else:
+            slug = self.meta[lang]['section'].split(',')[0] if 'section' in self.meta[lang] else self.messages[lang]["Uncategorized"]
+        return utils.slugify(slug)
 
     def permalink(self, lang=None, absolute=False, extension='.html', query=None):
         """Return permalink for a post."""
@@ -764,6 +814,7 @@ class Post(object):
             link = link[:-index_len]
         if query:
             link = link + "?" + query
+        link = utils.encodelink(link)
         return link
 
     @property
@@ -842,7 +893,7 @@ def get_metadata_from_file(source_path, config=None, lang=None):
             source_path = get_translation_candidate(config, source_path, lang)
         elif lang:
             source_path += '.' + lang
-        with io.open(source_path, "r", encoding="utf8") as meta_file:
+        with io.open(source_path, "r", encoding="utf-8-sig") as meta_file:
             meta_data = [x.strip() for x in meta_file.readlines()]
         return _get_metadata_from_file(meta_data)
     except (UnicodeDecodeError, UnicodeEncodeError):
@@ -851,17 +902,36 @@ def get_metadata_from_file(source_path, config=None, lang=None):
         return {}
 
 
+re_md_title = re.compile(r'^{0}([^{0}].*)'.format(re.escape('#')))
+# Assuming rst titles are going to be at least 4 chars long
+# otherwise this detects things like ''' wich breaks other markups.
+re_rst_title = re.compile(r'^([{0}]{{4,}})'.format(re.escape(
+    string.punctuation)))
+
+
+def _get_title_from_contents(meta_data):
+    """Extract title from file contents, LAST RESOURCE."""
+    piece = meta_data[:]
+    title = None
+    for i, line in enumerate(piece):
+        if re_rst_title.findall(line) and i > 0:
+            title = meta_data[i - 1].strip()
+            break
+        if (re_rst_title.findall(line) and i >= 0 and
+                re_rst_title.findall(meta_data[i + 2])):
+            title = meta_data[i + 1].strip()
+            break
+        if re_md_title.findall(line):
+            title = re_md_title.findall(line)[0]
+            break
+    return title
+
+
 def _get_metadata_from_file(meta_data):
     """Extract metadata from a post's source file."""
     meta = {}
     if not meta_data:
         return meta
-
-    re_md_title = re.compile(r'^{0}([^{0}].*)'.format(re.escape('#')))
-    # Assuming rst titles are going to be at least 4 chars long
-    # otherwise this detects things like ''' wich breaks other markups.
-    re_rst_title = re.compile(r'^([{0}]{{4,}})'.format(re.escape(
-        string.punctuation)))
 
     # Skip up to one empty line at the beginning (for txt2tags)
     if not meta_data[0]:
@@ -879,18 +949,9 @@ def _get_metadata_from_file(meta_data):
 
     # If we have no title, try to get it from document
     if 'title' not in meta:
-        piece = meta_data[:]
-        for i, line in enumerate(piece):
-            if re_rst_title.findall(line) and i > 0:
-                meta['title'] = meta_data[i - 1].strip()
-                break
-            if (re_rst_title.findall(line) and i >= 0 and
-                    re_rst_title.findall(meta_data[i + 2])):
-                meta['title'] = meta_data[i + 1].strip()
-                break
-            if re_md_title.findall(line):
-                meta['title'] = re_md_title.findall(line)[0]
-                break
+        t = _get_title_from_contents(meta_data)
+        if t is not None:
+            meta['title'] = t
 
     return meta
 
@@ -1015,7 +1076,11 @@ def hyphenate(dom, _lang):
     """Hyphenate a post."""
     # circular import prevention
     from .nikola import LEGAL_VALUES
-    lang = LEGAL_VALUES['PYPHEN_LOCALES'].get(_lang, pyphen.language_fallback(_lang))
+    lang = None
+    if pyphen is not None:
+        lang = LEGAL_VALUES['PYPHEN_LOCALES'].get(_lang, pyphen.language_fallback(_lang))
+    else:
+        utils.req_missing(['pyphen'], 'hyphenate texts', optional=True)
     if pyphen is not None and lang is not None:
         # If pyphen does exist, we tell the user when configuring the site.
         # If it does not support a language, we ignore it quietly.

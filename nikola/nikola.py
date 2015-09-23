@@ -80,7 +80,7 @@ else:
 
 # Default "Read more..." link
 DEFAULT_INDEX_READ_MORE_LINK = '<p class="more"><a href="{link}">{read_more}…</a></p>'
-DEFAULT_RSS_READ_MORE_LINK = '<p><a href="{link}">{read_more}…</a> ({min_remaining_read})</p>'
+DEFAULT_FEED_READ_MORE_LINK = '<p><a href="{link}">{read_more}…</a> ({min_remaining_read})</p>'
 
 # Default pattern for translation files' names
 DEFAULT_TRANSLATIONS_PATTERN = '{path}.{lang}.{ext}'
@@ -105,6 +105,7 @@ LEGAL_VALUES = {
         'ar': 'Arabic',
         'az': 'Azerbaijani',
         'bg': 'Bulgarian',
+        'bs': 'Bosnian',
         'ca': 'Catalan',
         ('cs', 'cz'): 'Czech',
         'da': 'Danish',
@@ -128,11 +129,13 @@ LEGAL_VALUES = {
         'nl': 'Dutch',
         'pa': 'Punjabi',
         'pl': 'Polish',
+        'pt': 'Portuguese',
         'pt_br': 'Portuguese (Brasil)',
         'ru': 'Russian',
         'sk': 'Slovak',
         'sl': 'Slovene',
         'sr': 'Serbian (Cyrillic)',
+        'sr_latin': 'Serbian (Latin)',
         'sv': 'Swedish',
         ('tr', '!tr_TR'): 'Turkish',
         'ur': 'Urdu',
@@ -167,7 +170,6 @@ LEGAL_VALUES = {
         # country specifier.  If there is no other locale that has the same
         # language with a different country, ``nikola init`` (but nobody else!)
         # will accept it, warning the user about it.
-        'pt': 'pt_br',
         'zh': 'zh_cn',
     },
     'RTL_LANGUAGES': ('ar', 'fa', 'ur'),
@@ -194,11 +196,13 @@ LEGAL_VALUES = {
         nb='no',
         nl='nl',
         pl='pl',
+        pt='pt-BR',  # hope nobody will mind
         pt_br='pt-BR',
         ru='ru',
         sk='sk',
         sl='si',  # country code is si, language code is sl, colorbox is wrong
         sr='sr',  # warning: this is serbian in Latin alphabet
+        sr_latin='sr',
         sv='sv',
         tr='tr',
         uk='uk',
@@ -207,19 +211,25 @@ LEGAL_VALUES = {
     'MOMENTJS_LOCALES': defaultdict(
         str,
         ar='ar',
+        az='az',
         bg='bg',
         bn='bn',
+        bs='bs',
         ca='ca',
         cs='cs',
         cz='cs',
         da='da',
         de='de',
+        el='el',
         en='',
+        eo='eo',
         es='es',
         et='et',
+        eu='eu',
         fa='fa',
         fi='fi',
         fr='fr',
+        hi='hi',
         hr='hr',
         id='id',
         it='it',
@@ -228,13 +238,16 @@ LEGAL_VALUES = {
         nb='nb',
         nl='nl',
         pl='pl',
+        pt='pt',
         pt_br='pt-br',
         ru='ru',
         sk='sk',
         sl='sl',
         sr='sr-cyrl',
+        sr_latin='sr',
         sv='sv',
         tr='tr',
+        uk='uk',
         zh_cn='zh-cn'
     ),
     'PYPHEN_LOCALES': {
@@ -254,12 +267,14 @@ LEGAL_VALUES = {
         'nb': 'nb',
         'nl': 'nl',
         'pl': 'pl',
+        'pt': 'pt',
         'pt_br': 'pt_BR',
         'ru': 'ru',
         'sk': 'sk',
         'sl': 'sl',
         'sr': 'sr',
         'sv': 'sv',
+        'uk': 'uk',
     },
 }
 
@@ -335,6 +350,10 @@ class Nikola(object):
             'ARCHIVE_PATH': "",
             'ARCHIVE_FILENAME': "archive.html",
             'ARCHIVES_ARE_INDEXES': False,
+            'AUTHOR_PATH': 'authors',
+            'AUTHOR_PAGES_ARE_INDEXES': False,
+            'AUTHOR_PAGES_DESCRIPTIONS': {},
+            'AUTHORLIST_MINIMUM_POSTS': 1,
             'BLOG_AUTHOR': 'Default Author',
             'BLOG_TITLE': 'Default Title',
             'BLOG_DESCRIPTION': 'Default Description',
@@ -343,6 +362,7 @@ class Nikola(object):
             'CATEGORY_PATH': None,  # None means: same as TAG_PATH
             'CATEGORY_PAGES_ARE_INDEXES': None,  # None means: same as TAG_PAGES_ARE_INDEXES
             'CATEGORY_PAGES_DESCRIPTIONS': {},
+            'CATEGORY_PAGES_TITLES': {},
             'CATEGORY_PREFIX': 'cat_',
             'CATEGORY_ALLOW_HIERARCHIES': False,
             'CATEGORY_OUTPUT_FLAT_HIERARCHY': False,
@@ -375,6 +395,7 @@ class Nikola(object):
             'DISABLED_PLUGINS': [],
             'EXTRA_PLUGINS_DIRS': [],
             'COMMENT_SYSTEM_ID': 'nikolademo',
+            'ENABLE_AUTHOR_PAGES': True,
             'EXTRA_HEAD_DATA': '',
             'FAVICONS': (),
             'FEED_LENGTH': 10,
@@ -393,6 +414,7 @@ class Nikola(object):
             'GZIP_COMMAND': None,
             'GZIP_FILES': False,
             'GZIP_EXTENSIONS': ('.txt', '.htm', '.html', '.css', '.js', '.json', '.xml'),
+            'HIDDEN_AUTHORS': [],
             'HIDDEN_TAGS': [],
             'HIDDEN_CATEGORIES': [],
             'HYPHENATE': False,
@@ -421,27 +443,35 @@ class Nikola(object):
             'OLD_THEME_SUPPORT': True,
             'OUTPUT_FOLDER': 'output',
             'POSTS': (("posts/*.txt", "posts", "post.tmpl"),),
+            'POSTS_SECTIONS': True,
+            'POSTS_SECTION_ARE_INDEXES': True,
+            'POSTS_SECTION_DESCRIPTIONS': "",
+            'POSTS_SECTION_FROM_META': False,
+            'POSTS_SECTION_NAME': "",
+            'POSTS_SECTION_TITLE': "{name}",
             'PAGES': (("stories/*.txt", "stories", "story.tmpl"),),
             'PANDOC_OPTIONS': [],
             'PRETTY_URLS': False,
             'FUTURE_IS_NOW': False,
             'INDEX_READ_MORE_LINK': DEFAULT_INDEX_READ_MORE_LINK,
-            'RSS_READ_MORE_LINK': DEFAULT_RSS_READ_MORE_LINK,
-            'RSS_LINKS_APPEND_QUERY': False,
             'REDIRECTIONS': [],
             'ROBOTS_EXCLUSIONS': [],
             'GENERATE_ATOM': False,
+            'FEED_TEASERS': True,
+            'FEED_PLAIN': False,
+            'FEED_PREVIEWIMAGE': True,
+            'FEED_READ_MORE_LINK': DEFAULT_FEED_READ_MORE_LINK,
+            'FEED_LINKS_APPEND_QUERY': False,
             'GENERATE_RSS': True,
             'RSS_LINK': None,
             'RSS_PATH': '',
-            'RSS_PLAIN': False,
-            'RSS_TEASERS': True,
             'SASS_COMPILER': 'sass',
             'SASS_OPTIONS': [],
             'SEARCH_FORM': '',
             'SHOW_BLOG_TITLE': True,
             'SHOW_SOURCELINK': True,
             'SHOW_UNTRANSLATED_POSTS': True,
+            'SLUG_AUTHOR_PATH': True,
             'SLUG_TAG_PATH': True,
             'SOCIAL_BUTTONS_CODE': '',
             'SITE_URL': 'https://example.com/',
@@ -451,18 +481,22 @@ class Nikola(object):
             'TAG_PATH': 'categories',
             'TAG_PAGES_ARE_INDEXES': False,
             'TAG_PAGES_DESCRIPTIONS': {},
+            'TAG_PAGES_TITLES': {},
             'TAGLIST_MINIMUM_POSTS': 1,
             'TEMPLATE_FILTERS': {},
             'THEME': 'bootstrap3',
+            'THEME_COLOR': '#5670d4',  # light "corporate blue"
             'THEME_REVEAL_CONFIG_SUBTHEME': 'sky',
             'THEME_REVEAL_CONFIG_TRANSITION': 'cube',
             'THUMBNAIL_SIZE': 180,
             'UNSLUGIFY_TITLES': False,  # WARNING: conf.py.in overrides this with True for backwards compatibility
             'URL_TYPE': 'rel_path',
+            'USE_BASE_TAG': True,
             'USE_BUNDLES': True,
             'USE_CDN': False,
             'USE_CDN_WARNING': True,
             'USE_FILENAME_AS_TITLE': True,
+            'USE_KATEX': False,
             'USE_OPEN_GRAPH': True,
             'USE_SLUGIFY': True,
             'TIMEZONE': 'UTC',
@@ -514,10 +548,20 @@ class Nikola(object):
                                       'EXTRA_HEAD_DATA',
                                       'NAVIGATION_LINKS',
                                       'INDEX_READ_MORE_LINK',
-                                      'RSS_READ_MORE_LINK',
+                                      'FEED_READ_MORE_LINK',
                                       'INDEXES_TITLE',
+                                      'POSTS_SECTION_COLORS',
+                                      'POSTS_SECTION_DESCRIPTIONS',
+                                      'POSTS_SECTION_NAME',
+                                      'POSTS_SECTION_TITLE',
                                       'INDEXES_PAGES',
-                                      'INDEXES_PRETTY_PAGE_URL',)
+                                      'INDEXES_PRETTY_PAGE_URL',
+                                      # PATH options (Issue #1914)
+                                      'TAG_PATH',
+                                      'CATEGORY_PATH',
+                                      'DATE_FORMAT',
+                                      'JS_DATE_FORMAT',
+                                      )
 
         self._GLOBAL_CONTEXT_TRANSLATABLE = ('blog_author',
                                              'blog_title',
@@ -528,9 +572,19 @@ class Nikola(object):
                                              'social_buttons_code',
                                              'search_form',
                                              'body_end',
-                                             'extra_head_data',)
+                                             'extra_head_data',
+                                             'date_format',
+                                             'js_date_format',)
         # WARNING: navigation_links SHOULD NOT be added to the list above.
         #          Themes ask for [lang] there and we should provide it.
+
+        # We first have to massage JS_DATE_FORMAT, otherwise we run into trouble
+        if 'JS_DATE_FORMAT' in self.config:
+            if isinstance(self.config['JS_DATE_FORMAT'], dict):
+                for k in self.config['JS_DATE_FORMAT']:
+                    self.config['JS_DATE_FORMAT'][k] = json.dumps(self.config['JS_DATE_FORMAT'][k])
+            else:
+                self.config['JS_DATE_FORMAT'] = json.dumps(self.config['JS_DATE_FORMAT'])
 
         for i in self.TRANSLATABLE_SETTINGS:
             try:
@@ -558,6 +612,38 @@ class Nikola(object):
             self.config['post_pages'].append([i1, i2, i3, True])
         for i1, i2, i3 in self.config['PAGES']:
             self.config['post_pages'].append([i1, i2, i3, False])
+
+        # RSS_TEASERS has been replaced with FEED_TEASERS
+        # TODO: remove on v8
+        if 'RSS_TEASERS' in config:
+            utils.LOGGER.warn('The RSS_TEASERS option is deprecated, use FEED_TEASERS instead.')
+            if 'FEED_TEASERS' in config:
+                utils.LOGGER.warn('FEED_TEASERS conflicts with RSS_TEASERS, ignoring RSS_TEASERS.')
+            self.config['FEED_TEASERS'] = config['RSS_TEASERS']
+
+        # RSS_PLAIN has been replaced with FEED_PLAIN
+        # TODO: remove on v8
+        if 'RSS_PLAIN' in config:
+            utils.LOGGER.warn('The RSS_PLAIN option is deprecated, use FEED_PLAIN instead.')
+            if 'FEED_PLAIN' in config:
+                utils.LOGGER.warn('FEED_PLIN conflicts with RSS_PLAIN, ignoring RSS_PLAIN.')
+            self.config['FEED_PLAIN'] = config['RSS_PLAIN']
+
+        # RSS_LINKS_APPEND_QUERY has been replaced with FEED_LINKS_APPEND_QUERY
+        # TODO: remove on v8
+        if 'RSS_LINKS_APPEND_QUERY' in config:
+            utils.LOGGER.warn('The RSS_LINKS_APPEND_QUERY option is deprecated, use FEED_LINKS_APPEND_QUERY instead.')
+            if 'FEED_TEASERS' in config:
+                utils.LOGGER.warn('FEED_LINKS_APPEND_QUERY conflicts with RSS_LINKS_APPEND_QUERY, ignoring RSS_LINKS_APPEND_QUERY.')
+            self.config['FEED_LINKS_APPEND_QUERY'] = utils.TranslatableSetting('FEED_LINKS_APPEND_QUERY', config['RSS_LINKS_APPEND_QUERY'], self.config['TRANSLATIONS'])
+
+        # RSS_READ_MORE_LINK has been replaced with FEED_READ_MORE_LINK
+        # TODO: remove on v8
+        if 'RSS_READ_MORE_LINK' in config:
+            utils.LOGGER.warn('The RSS_READ_MORE_LINK option is deprecated, use FEED_READ_MORE_LINK instead.')
+            if 'FEED_READ_MORE_LINK' in config:
+                utils.LOGGER.warn('FEED_READ_MORE_LINK conflicts with RSS_READ_MORE_LINK, ignoring RSS_READ_MORE_LINK')
+            self.config['FEED_READ_MORE_LINK'] = utils.TranslatableSetting('FEED_READ_MORE_LINK', config['RSS_READ_MORE_LINK'], self.config['TRANSLATIONS'])
 
         # DEFAULT_TRANSLATIONS_PATTERN was changed from "p.e.l" to "p.l.e"
         # TODO: remove on v8
@@ -638,7 +724,7 @@ class Nikola(object):
         if not self.config.get('COPY_SOURCES'):
             self.config['SHOW_SOURCELINK'] = False
 
-        if self.config['CATEGORY_PATH'] is None:
+        if self.config['CATEGORY_PATH']._inp is None:
             self.config['CATEGORY_PATH'] = self.config['TAG_PATH']
         if self.config['CATEGORY_PAGES_ARE_INDEXES'] is None:
             self.config['CATEGORY_PAGES_ARE_INDEXES'] = self.config['TAG_PAGES_ARE_INDEXES']
@@ -779,7 +865,7 @@ class Nikola(object):
                 # Remove compiler extensions we don't need
                 if p[-1].details.has_option('Nikola', 'compiler') and p[-1].details.get('Nikola', 'compiler') in self.disabled_compilers:
                     bad_candidates.add(p)
-                    utils.LOGGER.debug('Not loading comopiler extension {}', p[-1].name)
+                    utils.LOGGER.debug('Not loading compiler extension {}', p[-1].name)
         self.plugin_manager._candidates = list(set(self.plugin_manager._candidates) - bad_candidates)
         self.plugin_manager.loadPlugins()
 
@@ -832,13 +918,16 @@ class Nikola(object):
         self._GLOBAL_CONTEXT['rel_link'] = self.rel_link
         self._GLOBAL_CONTEXT['abs_link'] = self.abs_link
         self._GLOBAL_CONTEXT['exists'] = self.file_exists
+        self._GLOBAL_CONTEXT['SLUG_AUTHOR_PATH'] = self.config['SLUG_AUTHOR_PATH']
         self._GLOBAL_CONTEXT['SLUG_TAG_PATH'] = self.config['SLUG_TAG_PATH']
         self._GLOBAL_CONTEXT['annotations'] = self.config['ANNOTATIONS']
         self._GLOBAL_CONTEXT['index_display_post_count'] = self.config[
             'INDEX_DISPLAY_POST_COUNT']
         self._GLOBAL_CONTEXT['index_file'] = self.config['INDEX_FILE']
+        self._GLOBAL_CONTEXT['use_base_tag'] = self.config['USE_BASE_TAG']
         self._GLOBAL_CONTEXT['use_bundles'] = self.config['USE_BUNDLES']
         self._GLOBAL_CONTEXT['use_cdn'] = self.config.get("USE_CDN")
+        self._GLOBAL_CONTEXT['theme_color'] = self.config.get("THEME_COLOR")
         self._GLOBAL_CONTEXT['favicons'] = self.config['FAVICONS']
         self._GLOBAL_CONTEXT['date_format'] = self.config.get('DATE_FORMAT')
         self._GLOBAL_CONTEXT['blog_author'] = self.config.get('BLOG_AUTHOR')
@@ -846,6 +935,8 @@ class Nikola(object):
         self._GLOBAL_CONTEXT['show_blog_title'] = self.config.get('SHOW_BLOG_TITLE')
         self._GLOBAL_CONTEXT['logo_url'] = self.config.get('LOGO_URL')
         self._GLOBAL_CONTEXT['blog_description'] = self.config.get('BLOG_DESCRIPTION')
+        self._GLOBAL_CONTEXT['color_hsl_adjust_hex'] = utils.color_hsl_adjust_hex
+        self._GLOBAL_CONTEXT['colorize_str_from_base_color'] = utils.colorize_str_from_base_color
 
         # TODO: remove in v8
         self._GLOBAL_CONTEXT['blog_desc'] = self.config.get('BLOG_DESCRIPTION')
@@ -862,6 +953,7 @@ class Nikola(object):
         self._GLOBAL_CONTEXT['site_has_comments'] = bool(self.config.get('COMMENT_SYSTEM'))
         self._GLOBAL_CONTEXT['mathjax_config'] = self.config.get(
             'MATHJAX_CONFIG')
+        self._GLOBAL_CONTEXT['use_katex'] = self.config.get('USE_KATEX')
         self._GLOBAL_CONTEXT['subtheme'] = self.config.get('THEME_REVEAL_CONFIG_SUBTHEME')
         self._GLOBAL_CONTEXT['transition'] = self.config.get('THEME_REVEAL_CONFIG_TRANSITION')
         self._GLOBAL_CONTEXT['content_footer'] = self.config.get(
@@ -883,12 +975,20 @@ class Nikola(object):
             'SHOW_SOURCELINK')
         self._GLOBAL_CONTEXT['extra_head_data'] = self.config.get('EXTRA_HEAD_DATA')
         self._GLOBAL_CONTEXT['date_fanciness'] = self.config.get('DATE_FANCINESS')
-        self._GLOBAL_CONTEXT['js_date_format'] = json.dumps(self.config.get('JS_DATE_FORMAT'))
+        self._GLOBAL_CONTEXT['js_date_format'] = self.config.get('JS_DATE_FORMAT')
         self._GLOBAL_CONTEXT['colorbox_locales'] = LEGAL_VALUES['COLORBOX_LOCALES']
         self._GLOBAL_CONTEXT['momentjs_locales'] = LEGAL_VALUES['MOMENTJS_LOCALES']
         self._GLOBAL_CONTEXT['hidden_tags'] = self.config.get('HIDDEN_TAGS')
         self._GLOBAL_CONTEXT['hidden_categories'] = self.config.get('HIDDEN_CATEGORIES')
+        self._GLOBAL_CONTEXT['hidden_authors'] = self.config.get('HIDDEN_AUTHORS')
         self._GLOBAL_CONTEXT['url_replacer'] = self.url_replacer
+        self._GLOBAL_CONTEXT['posts_sections'] = self.config.get('POSTS_SECTIONS')
+        self._GLOBAL_CONTEXT['posts_section_are_indexes'] = self.config.get('POSTS_SECTION_ARE_INDEXES')
+        self._GLOBAL_CONTEXT['posts_section_colors'] = self.config.get('POSTS_SECTION_COLORS')
+        self._GLOBAL_CONTEXT['posts_section_descriptions'] = self.config.get('POSTS_SECTION_DESCRIPTIONS')
+        self._GLOBAL_CONTEXT['posts_section_from_meta'] = self.config.get('POSTS_SECTION_FROM_META')
+        self._GLOBAL_CONTEXT['posts_section_name'] = self.config.get('POSTS_SECTION_NAME')
+        self._GLOBAL_CONTEXT['posts_section_title'] = self.config.get('POSTS_SECTION_TITLE')
 
         # IPython theme configuration.  If a website has ipynb enabled in post_pages
         # we should enable the IPython CSS (leaving that up to the theme itself).
@@ -1057,10 +1157,23 @@ class Nikola(object):
         utils.makedirs(os.path.dirname(output_name))
         parser = lxml.html.HTMLParser(remove_blank_text=True)
         doc = lxml.html.document_fromstring(data, parser)
-        doc.rewrite_links(lambda dst: self.url_replacer(src, dst, context['lang']), resolve_base_href=False)
+        self.rewrite_links(doc, src, context['lang'])
         data = b'<!DOCTYPE html>\n' + lxml.html.tostring(doc, encoding='utf8', method='html', pretty_print=True)
         with open(output_name, "wb+") as post_file:
             post_file.write(data)
+
+    def rewrite_links(self, doc, src, lang):
+        """Replace links in document to point to the right places."""
+        # First let lxml replace most of them
+        doc.rewrite_links(lambda dst: self.url_replacer(src, dst, lang), resolve_base_href=False)
+
+        # lxml ignores srcset in img and source elements, so do that by hand
+        objs = list(doc.xpath('(*//img|*//source)'))
+        for obj in objs:
+            if 'srcset' in obj.attrib:
+                urls = [u.strip() for u in obj.attrib['srcset'].split(',')]
+                urls = [self.url_replacer(src, dst, lang) for dst in urls]
+                obj.set('srcset', ', '.join(urls))
 
     def url_replacer(self, src, dst, lang=None, url_type=None):
         """Mangle URLs.
@@ -1183,7 +1296,7 @@ class Nikola(object):
         """Take all necessary data, and render a RSS feed in output_path."""
         rss_obj = utils.ExtendedRSS2(
             title=title,
-            link=link,
+            link=utils.encodelink(link),
             description=description,
             lastBuildDate=datetime.datetime.utcnow(),
             generator='https://getnikola.com/',
@@ -1204,10 +1317,12 @@ class Nikola(object):
 
         for post in timeline[:feed_length]:
             data = post.text(lang, teaser_only=rss_teasers, strip_html=rss_plain,
-                             rss_read_more_link=True, rss_links_append_query=feed_append_query)
+                             feed_read_more_link=True, feed_links_append_query=feed_append_query)
             if feed_url is not None and data:
                 # Massage the post's HTML (unless plain)
                 if not rss_plain:
+                    if self.config["FEED_PREVIEWIMAGE"] and 'previewimage' in post.meta[lang] and post.meta[lang]['previewimage'] not in data:
+                        data = "<figure><img src=\"{}\"></figure> {}".format(post.meta[lang]['previewimage'], data)
                     # FIXME: this is duplicated with code in Post.text()
                     try:
                         doc = lxml.html.document_fromstring(data)
@@ -1299,7 +1414,6 @@ class Nikola(object):
         try:
             path = self.path_handlers[kind](name, lang)
             path = [os.path.normpath(p) for p in path if p != '.']  # Fix Issue #1028
-
             if is_link:
                 link = '/' + ('/'.join(path))
                 index_len = len(self.config['INDEX_FILE'])
@@ -1315,13 +1429,25 @@ class Nikola(object):
             return ""
 
     def post_path(self, name, lang):
-        """Handle post_path paths."""
+        """Link to the destination of an element in the POSTS/PAGES settings.
+
+        Example:
+
+        link://post_path/posts => /blog
+        """
         return [_f for _f in [self.config['TRANSLATIONS'][lang],
                               os.path.dirname(name),
                               self.config['INDEX_FILE']] if _f]
 
     def root_path(self, name, lang):
-        """Handle root_path paths."""
+        """Link to the current language's root.
+
+        Example:
+
+        link://root_path => /
+
+        link://root_path => /translations/spanish/
+        """
         d = self.config['TRANSLATIONS'][lang]
         if d:
             return [d, '']
@@ -1329,7 +1455,12 @@ class Nikola(object):
             return []
 
     def slug_path(self, name, lang):
-        """Handle slug paths."""
+        """A link to a post with given slug, if not ambiguous.
+
+        Example:
+
+        links://slug/yellow-camaro => /posts/cars/awful/yellow-camaro/index.html
+        """
         results = [p for p in self.timeline if p.meta('slug') == name]
         if not results:
             utils.LOGGER.warning("Cannot resolve path request for slug: {0}".format(name))
@@ -1339,7 +1470,12 @@ class Nikola(object):
             return [_f for _f in results[0].permalink(lang).split('/') if _f]
 
     def filename_path(self, name, lang):
-        """Handle filename paths."""
+        """Link to post or story by source filename.
+
+        Example:
+
+        link://filename/manual.txt => /docs/handbook.html
+        """
         results = [p for p in self.timeline if p.source_path == name]
         if not results:
             utils.LOGGER.warning("Cannot resolve path request for filename: {0}".format(name))
@@ -1357,7 +1493,9 @@ class Nikola(object):
 
     def link(self, *args):
         """Create a link."""
-        return self.path(*args, is_link=True)
+        url = self.path(*args, is_link=True)
+        url = utils.encodelink(url)
+        return url
 
     def abs_link(self, dst, protocol_relative=False):
         """Get an absolute link."""
@@ -1369,6 +1507,7 @@ class Nikola(object):
         url = urlparse(dst).geturl()
         if protocol_relative:
             url = url.split(":", 1)[1]
+        url = utils.encodelink(url)
         return url
 
     def rel_link(self, src, dst):
@@ -1383,7 +1522,7 @@ class Nikola(object):
         parsed_src = urlsplit(src)
         parsed_dst = urlsplit(dst)
         if parsed_src[:2] != parsed_dst[:2]:
-            return dst
+            return utils.encodelink(dst)
         # Now both paths are on the same site and absolute
         src_elems = parsed_src.path.split('/')[1:]
         dst_elems = parsed_dst.path.split('/')[1:]
@@ -1394,7 +1533,9 @@ class Nikola(object):
         else:
             i += 1
         # Now i is the longest common prefix
-        return '/'.join(['..'] * (len(src_elems) - i - 1) + dst_elems[i:])
+        url = '/'.join(['..'] * (len(src_elems) - i - 1) + dst_elems[i:])
+        url = utils.encodelink(url)
+        return url
 
     def file_exists(self, path, not_empty=False):
         """Check if the file exists. If not_empty is True, it also must not be empty."""
@@ -1545,7 +1686,7 @@ class Nikola(object):
                             utils.LOGGER.error('Tag {0} is used in: {1}'.format(other_tag, ', '.join([p.source_path for p in self.posts_per_tag[other_tag]])))
                             quit = True
                     else:
-                        slugged_tags.add(utils.slugify(tag, force=True))
+                        slugged_tags.add(utils.slugify(tag))
                     self.posts_per_tag[tag].append(post)
                 for lang in self.config['TRANSLATIONS'].keys():
                     self.tags_per_language[lang].extend(post.tags_for_language(lang))
@@ -1702,9 +1843,10 @@ class Nikola(object):
             link = lxml.etree.Element("link")
             link.set("rel", link_rel)
             link.set("type", link_type)
-            link.set("href", link_href)
+            link.set("href", utils.encodelink(link_href))
             return link
 
+        utils.LocaleBorg().set_locale(lang)
         deps = []
         uptodate_deps = []
         for post in posts:
@@ -1730,15 +1872,13 @@ class Nikola(object):
         deps_context['navigation_links'] = deps_context['global']['navigation_links'](lang)
 
         nslist = {}
-        if context["is_feed_stale"] or (not context["feedpagenum"] == context["feedpagecount"] - 1 and not context["feedpagenum"] == 0):
+        if context["is_feed_stale"] or "feedpagenum" in context and (not context["feedpagenum"] == context["feedpagecount"] - 1 and not context["feedpagenum"] == 0):
             nslist["fh"] = "http://purl.org/syndication/history/1.0"
-        if not self.config["RSS_TEASERS"]:
-            nslist["xh"] = "http://www.w3.org/1999/xhtml"
         feed_xsl_link = self.abs_link("/assets/xml/atom.xsl")
         feed_root = lxml.etree.Element("feed", nsmap=nslist)
         feed_root.addprevious(lxml.etree.ProcessingInstruction(
             "xml-stylesheet",
-            'href="' + feed_xsl_link + '" type="text/xsl media="all"'))
+            'href="' + utils.encodelink(feed_xsl_link) + '" type="text/xsl media="all"'))
         feed_root.set("{http://www.w3.org/XML/1998/namespace}lang", lang)
         feed_root.set("xmlns", "http://www.w3.org/2005/Atom")
         feed_title = lxml.etree.SubElement(feed_root, "title")
@@ -1746,7 +1886,7 @@ class Nikola(object):
         feed_id = lxml.etree.SubElement(feed_root, "id")
         feed_id.text = self.abs_link(context["feedlink"])
         feed_updated = lxml.etree.SubElement(feed_root, "updated")
-        feed_updated.text = post.formatted_date('webiso', datetime.datetime.now(tz=dateutil.tz.tzutc()))
+        feed_updated.text = utils.LocaleBorg().formatted_date('webiso', datetime.datetime.now(tz=dateutil.tz.tzutc()))
         feed_author = lxml.etree.SubElement(feed_root, "author")
         feed_author_name = lxml.etree.SubElement(feed_author, "name")
         feed_author_name.text = self.config["BLOG_AUTHOR"](lang)
@@ -1759,50 +1899,64 @@ class Nikola(object):
         if "prevfeedlink" in context:
             feed_root.append(atom_link("previous", "application/atom+xml",
                                        self.abs_link(context["prevfeedlink"])))
-        if context["is_feed_stale"] or not context["feedpagenum"] == 0:
+        if context["is_feed_stale"] or "feedpagenum" in context and not context["feedpagenum"] == 0:
             feed_root.append(atom_link("current", "application/atom+xml",
                              self.abs_link(context["currentfeedlink"])))
             # Older is "prev-archive" and newer is "next-archive" in archived feeds (opposite of paginated)
-            if "prevfeedlink" in context and (context["is_feed_stale"] or not context["feedpagenum"] == context["feedpagecount"] - 1):
+            if "prevfeedlink" in context and (context["is_feed_stale"] or "feedpagenum" in context and not context["feedpagenum"] == context["feedpagecount"] - 1):
                 feed_root.append(atom_link("next-archive", "application/atom+xml",
                                            self.abs_link(context["prevfeedlink"])))
             if "nextfeedlink" in context:
                 feed_root.append(atom_link("prev-archive", "application/atom+xml",
                                            self.abs_link(context["nextfeedlink"])))
-            if context["is_feed_stale"] or not context["feedpagenum"] == context["feedpagecount"] - 1:
+            if context["is_feed_stale"] or "feedpagenum" and not context["feedpagenum"] == context["feedpagecount"] - 1:
                 lxml.etree.SubElement(feed_root, "{http://purl.org/syndication/history/1.0}archive")
         feed_root.append(atom_link("alternate", "text/html",
                                    self.abs_link(context["permalink"])))
         feed_generator = lxml.etree.SubElement(feed_root, "generator")
-        feed_generator.set("uri", "http://getnikola.com/")
+        feed_generator.set("uri", "https://getnikola.com/")
         feed_generator.text = "Nikola"
 
         feed_append_query = None
-        if self.config["RSS_LINKS_APPEND_QUERY"]:
-            feed_append_query = self.config["RSS_LINKS_APPEND_QUERY"].format(
+        if self.config["FEED_LINKS_APPEND_QUERY"]:
+            feed_append_query = self.config["FEED_LINKS_APPEND_QUERY"].format(
                 feedRelUri=context["feedlink"],
                 feedFormat="atom")
 
-        for post in posts:
-            data = post.text(lang, teaser_only=self.config["RSS_TEASERS"], strip_html=self.config["RSS_TEASERS"],
-                             rss_read_more_link=True, rss_links_append_query=feed_append_query)
-            if not self.config["RSS_TEASERS"]:
+        def atom_post_text(post, text):
+            if not self.config["FEED_PLAIN"]:
+                if self.config["FEED_PREVIEWIMAGE"] and 'previewimage' in post.meta[lang] and post.meta[lang]['previewimage'] not in text:
+                    text = "<figure><img src=\"{}\"></figure> {}".format(post.meta[lang]['previewimage'], text)
+
                 # FIXME: this is duplicated with code in Post.text() and generic_rss_renderer
                 try:
-                    doc = lxml.html.document_fromstring(data)
-                    doc.rewrite_links(lambda dst: self.url_replacer(post.permalink(), dst, lang, 'absolute'))
+                    doc = lxml.html.document_fromstring(text)
+                    doc.rewrite_links(lambda dst: self.url_replacer(post.permalink(lang), dst, lang, 'absolute'))
                     try:
                         body = doc.body
-                        data = (body.text or '') + ''.join(
+                        text = (body.text or '') + ''.join(
                             [lxml.html.tostring(child, encoding='unicode')
                                 for child in body.iterchildren()])
                     except IndexError:  # No body there, it happens sometimes
-                        data = ''
+                        text = ''
                 except lxml.etree.ParserError as e:
                     if str(e) == "Document is empty":
-                        data = ""
+                        text = ""
                     else:  # let other errors raise
                         raise(e)
+            return text.strip()
+
+        for post in posts:
+            summary = atom_post_text(post, post.text(lang, teaser_only=True,
+                                                     strip_html=self.config["FEED_PLAIN"],
+                                                     feed_read_more_link=True,
+                                                     feed_links_append_query=feed_append_query))
+            content = None
+            if not self.config["FEED_TEASERS"]:
+                content = atom_post_text(post, post.text(lang, teaser_only=self.config["FEED_TEASERS"],
+                                                         strip_html=self.config["FEED_PLAIN"],
+                                                         feed_read_more_link=True,
+                                                         feed_links_append_query=feed_append_query))
 
             entry_root = lxml.etree.SubElement(feed_root, "entry")
             entry_title = lxml.etree.SubElement(entry_root, "title")
@@ -1819,15 +1973,20 @@ class Nikola(object):
             entry_root.append(atom_link("alternate", "text/html",
                               post.permalink(lang, absolute=True,
                                              query=feed_append_query)))
-            if self.config["RSS_TEASERS"]:
-                entry_summary = lxml.etree.SubElement(entry_root, "summary")
-                entry_summary.text = data
+            entry_summary = lxml.etree.SubElement(entry_root, "summary")
+            if not self.config["FEED_PLAIN"]:
+                entry_summary.set("type", "html")
             else:
+                entry_summary.set("type", "text")
+            entry_summary.text = summary
+            if content:
                 entry_content = lxml.etree.SubElement(entry_root, "content")
-                entry_content.set("type", "xhtml")
-                entry_content_nsdiv = lxml.etree.SubElement(entry_content, "{http://www.w3.org/1999/xhtml}div")
-                entry_content_nsdiv.text = data
-            for category in post.tags:
+                if not self.config["FEED_PLAIN"]:
+                    entry_content.set("type", "html")
+                else:
+                    entry_content.set("type", "text")
+                entry_content.text = content
+            for category in post.tags_for_language(lang):
                 entry_category = lxml.etree.SubElement(entry_root, "category")
                 entry_category.set("term", utils.slugify(category))
                 entry_category.set("label", category)
@@ -1877,8 +2036,7 @@ class Nikola(object):
         kw['indexes_prety_page_url'] = self.config["INDEXES_PRETTY_PAGE_URL"]
         kw['demote_headers'] = self.config['DEMOTE_HEADERS']
         kw['generate_atom'] = self.config["GENERATE_ATOM"]
-        kw['feed_link_append_query'] = self.config["RSS_LINKS_APPEND_QUERY"]
-        kw['feed_teasers'] = self.config["RSS_TEASERS"]
+        kw['feed_link_append_query'] = self.config["FEED_LINKS_APPEND_QUERY"]
         kw['currentfeed'] = None
 
         # Split in smaller lists
@@ -1969,6 +2127,9 @@ class Nikola(object):
                 context["currentfeedlink"] = kw["currentfeed"]
                 context["feedpagenum"] = i
                 context["feedpagecount"] = num_pages
+                kw['feed_teasers'] = self.config['FEED_TEASERS']
+                kw['feed_plain'] = self.config['FEED_PLAIN']
+                kw['feed_previewimage'] = self.config['FEED_PREVIEWIMAGE']
                 atom_task = {
                     "basename": basename,
                     "name": atom_output_name,

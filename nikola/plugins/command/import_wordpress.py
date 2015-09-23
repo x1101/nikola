@@ -50,7 +50,7 @@ except ImportError:
 
 from nikola.plugin_categories import Command
 from nikola import utils
-from nikola.utils import req_missing
+from nikola.utils import req_missing, unicode_str
 from nikola.plugins.basic_import import ImportMixin, links
 from nikola.nikola import DEFAULT_TRANSLATIONS_PATTERN
 from nikola.plugins.command.init import SAMPLE_CONF, prepare_config, format_default_translations_config
@@ -191,6 +191,12 @@ class CommandImportWordpress(Command, ImportMixin):
             'type': bool,
             'help': "Automatically installs the WordPress page compiler (either locally or in the new site) if required by other options.\nWarning: the compiler is GPL software!",
         },
+        {
+            'name': 'tag_saniziting_strategy',
+            'long': 'tag-saniziting-strategy',
+            'default': 'first',
+            'help': 'lower: Convert all tag and category names to lower case\nfirst: Keep first spelling of tag or category name',
+        },
     ]
     all_tags = set([])
 
@@ -238,6 +244,8 @@ class CommandImportWordpress(Command, ImportMixin):
         self.use_wordpress_compiler = options.get('use_wordpress_compiler', False)
         self.install_wordpress_compiler = options.get('install_wordpress_compiler', False)
         self.wordpress_page_compiler = None
+
+        self.tag_saniziting_strategy = options.get('tag_saniziting_strategy', 'first')
 
         self.auth = None
         if options.get('download_auth') is not None:
@@ -337,7 +345,10 @@ class CommandImportWordpress(Command, ImportMixin):
         # Add tag redirects
         for tag in self.all_tags:
             try:
-                tag_str = tag.decode('utf8')
+                if isinstance(tag, utils.bytes_str):
+                    tag_str = tag.decode('utf8', 'replace')
+                else:
+                    tag_str = tag
             except AttributeError:
                 tag_str = tag
             tag = utils.slugify(tag_str)
@@ -604,7 +615,7 @@ class CommandImportWordpress(Command, ImportMixin):
 
     def transform_code(self, content):
         """Transform code blocks."""
-        # http://en.support.wordpress.com/code/posting-source-code/. There are
+        # https://en.support.wordpress.com/code/posting-source-code/. There are
         # a ton of things not supported here. We only do a basic [code
         # lang="x"] -> ```x translation, and remove quoted html entities (<,
         # >, &, and ").
@@ -686,7 +697,7 @@ class CommandImportWordpress(Command, ImportMixin):
         elif approved == 'spam' or approved == 'trash':
             pass
         else:
-            LOGGER.warn("Unknown comment approved status: " + str(approved))
+            LOGGER.warn("Unknown comment approved status: {0}".format(approved))
         parent = int(get_text_tag(comment, "{{{0}}}comment_parent".format(wordpress_namespace), 0))
         if parent == 0:
             parent = None
@@ -707,7 +718,7 @@ class CommandImportWordpress(Command, ImportMixin):
             """Write comment header line."""
             if header_content is None:
                 return
-            header_content = str(header_content).replace('\n', ' ')
+            header_content = unicode_str(header_content).replace('\n', ' ')
             line = '.. ' + header_field + ': ' + header_content + '\n'
             fd.write(line.encode('utf8'))
 
@@ -747,6 +758,24 @@ class CommandImportWordpress(Command, ImportMixin):
             tags_cats = tags + categories
         return tags_cats, other_meta
 
+    _tag_sanitize_map = {True: {}, False: {}}
+
+    def _sanitize(self, tag, is_category):
+        if self.tag_saniziting_strategy == 'lower':
+            return tag.lower()
+        if tag.lower() not in self._tag_sanitize_map[is_category]:
+            self._tag_sanitize_map[is_category][tag.lower()] = [tag]
+            return tag
+        previous = self._tag_sanitize_map[is_category][tag.lower()]
+        if self.tag_saniziting_strategy == 'first':
+            if tag != previous[0]:
+                LOGGER.warn("Changing spelling of {0} name '{1}' to {2}.".format('category' if is_category else 'tag', tag, previous[0]))
+            return previous[0]
+        else:
+            LOGGER.error("Unknown tag sanitizing strategy '{0}'!".format(self.tag_saniziting_strategy))
+            sys.exit(1)
+        return tag
+
     def import_postpage_item(self, item, wordpress_namespace, out_folder=None, attachments=None):
         """Take an item from the feed and creates a post file."""
         if out_folder is None:
@@ -760,7 +789,10 @@ class CommandImportWordpress(Command, ImportMixin):
         path = unquote(parsed.path.strip('/'))
 
         try:
-            path = path.decode('utf8')
+            if isinstance(path, utils.bytes_str):
+                path = path.decode('utf8', 'replace')
+            else:
+                path = path
         except AttributeError:
             pass
 
@@ -831,14 +863,23 @@ class CommandImportWordpress(Command, ImportMixin):
                 type = tag.attrib['domain']
             if text == 'Uncategorized' and type == 'category':
                 continue
-            self.all_tags.add(text)
             if type == 'category':
-                categories.append(type)
+                categories.append(text)
             else:
                 tags.append(text)
 
         if '$latex' in content:
             tags.append('mathjax')
+
+        for i, cat in enumerate(categories[:]):
+            cat = self._sanitize(cat, True)
+            categories[i] = cat
+            self.all_tags.add(cat)
+
+        for i, tag in enumerate(tags[:]):
+            tag = self._sanitize(tag, False)
+            tags[i] = tag
+            self.all_tags.add(tag)
 
         # Find post format if it's there
         post_format = 'wp'
@@ -905,7 +946,7 @@ class CommandImportWordpress(Command, ImportMixin):
                         comments.append(comment)
 
                 for comment in comments:
-                    comment_filename = slug + "." + str(comment['id']) + ".wpcomment"
+                    comment_filename = "{0}.{1}.wpcomment".format(slug, comment['id'])
                     self._write_comment(os.path.join(self.output_folder, out_folder, comment_filename), comment)
 
             return (out_folder, slug)

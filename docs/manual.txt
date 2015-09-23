@@ -3,11 +3,13 @@
 .. date: 2012-03-30 23:00:00 UTC-03:00
 .. link:
 .. description:
+.. tags: mathjax
+.. author: The Nikola Team
 
 The Nikola Handbook
 ===================
 
-:Version: 7.6.3
+:Version: 7.7.1
 
 .. class:: alert alert-info pull-right
 
@@ -168,6 +170,7 @@ Nikola provides the following features:
   * Indexes
   * RSS and Atom feeds
   * Tags and categories, with pages and feeds
+  * Author pages and feeds (not generated if ``ENABLE_AUTHOR_PAGES`` is set to ``False`` or there is only one author)
   * Archives with custom granularity (yearly or monthly)
   * `Comments`_
   * Client-side tag clouds (needs manual configuration)
@@ -203,6 +206,15 @@ To set Nikola up and create your first site, read the `Getting Started Guide <ht
 
 Creating a Blog Post
 --------------------
+
+.. sidebar:: Magic Links
+
+   You will want to do things like "link from one post to another" or "link to an image gallery",
+   etc. Sure, you can just figure out the URLs for each thing and use that. Or you can use
+   Nikola's special link URLs. Those are done using the syntax ``link://kind/name`` and
+   a full list of the included ones is `here <link://slug/path-handlers>`__ (BTW, I linked
+   to that using ``link://slug/path-handlers``)
+
 
 To create a new post, the easiest way is to run ``nikola new_post``. You  will
 be asked for a title for your post, and it will tell you where the post's file
@@ -300,6 +312,10 @@ to your configuration:
    hidetitle
       Set "True" if you do not want to see the **page** title as a
       heading of the output html file (does not work for posts).
+
+   hyphenate
+      Set "True" if you want this document to be hyphenated even if you have
+      hyphenation disabled by default.
 
    nocomments
       Set to "True" to disable comments. Example:
@@ -438,6 +454,14 @@ and ``PAGES`` configuration options:
         ("stories/*.rst", "stories", "story.tmpl"),
     )
 
+.. note:: POSTS and PAGES are not flat!
+
+   Even if the syntax may suggest you can't, you can create any directory structure you want
+   inside ``posts/`` or ``stories/`` and it will be reflected in the output. For example,
+   ``posts/foo/bar.txt`` would produce  ``output/posts/foo/bar.html``, assuming the slug is also ``bar``.
+
+   If you have ``PRETTY_URLS`` enabled, that would be ``output/posts/foo/bar/index.html``.
+
 ``new_post`` will use the *first* path in ``POSTS`` (or ``PAGES`` if ``-p`` is
 supplied) that ends with the extension of your desired markup format (as
 defined in ``COMPILERS`` in ``conf.py``) as the directory that the new post will be
@@ -491,8 +515,8 @@ In Markdown (or basically, the resulting HTML of any format):
 By default all your RSS feeds will be shortened (they'll contain only teasers)
 whereas your index page will still show complete posts. You can change
 this behaviour with your ``conf.py``: ``INDEX_TEASERS`` defines whether index
-page should display the whole contents or only teasers. ``RSS_TEASERS``
-works the same way for your RSS feeds.
+page should display the whole contents or only teasers. ``FEED_TEASERS``
+works the same way for your Atom and RSS feeds.
 
 By default, teasers will include a "read more" link at the end. If you want to
 change that text, you can use a custom teaser:
@@ -633,6 +657,9 @@ Titles of the pages can be controlled by using ``INDEXES_TITLES``,
 Categories and tags use simple lists by default that show only titles and
 dates; however, you can switch them to full indexes by using
 ``CATEGORY_PAGES_ARE_INDEXES`` and ``TAG_PAGES_ARE_INDEXES``, respectively.
+
+Something similar happens with authors. To use full indexes in authors, set
+``AUTHOR_PAGES_ARE_INDEXES`` to ``True``.
 
 Static indexes
 ``````````````
@@ -1025,13 +1052,13 @@ to create a custom theme by downloading free CSS files from http://bootswatch.co
 
 .. code:: console
 
-    $ nikola bootswatch_theme -n custom_theme -s spruce -p bootstrap3
+    $ nikola bootswatch_theme -n custom_theme -s flatly -p bootstrap3
     [2013-10-12T16:46:58Z] NOTICE: bootswatch_theme: Creating 'custom_theme' theme
-    from 'spruce' and 'bootstrap3'
+    from 'flatly' and 'bootstrap3'
     [2013-10-12T16:46:58Z] NOTICE: bootswatch_theme: Downloading:
-    http://bootswatch.com//spruce/bootstrap.min.css
+    http://bootswatch.com//flatly/bootstrap.min.css
     [2013-10-12T16:46:58Z] NOTICE: bootswatch_theme: Downloading:
-    http://bootswatch.com//spruce/bootstrap.css
+    http://bootswatch.com//flatly/bootstrap.css
     [2013-10-12T16:46:59Z] NOTICE: bootswatch_theme: Theme created. Change the THEME setting to "custom_theme" to use it.
 
 You can even try what different swatches do on an existing site using
@@ -1121,8 +1148,7 @@ to one of "disqus", "intensedebate", "livefyre", "moot", "googleplus",
    * In IntenseDebate it's the **IntenseDebate site acct**
    * In LiveFyre it's the **siteId**
    * In Moot it's your **username**
-   * For Google Plus, ``COMMENT_SYSTEM_ID`` need not be set, but you must
-     `verify your authorship <https://plus.google.com/authorship>`_
+   * For Google Plus, ``COMMENT_SYSTEM_ID`` need not be set. WARNING: this will not work correctly in the test server, needs to be deployed to a real server/URL.
    * For Facebook, you need to `create an app
      <https://developers.facebook.com/apps>` (turn off sandbox mode!)
      and get an **App ID**
@@ -1333,6 +1359,10 @@ typogrify_sans_widont
 minify_lines
    **THIS FILTER HAS BEEN TURNED INTO A NOOP** and currently does nothing.
 
+normalize_html
+   Pass HTML through LXML to normalize it. For example, it will resolve ``&quot;`` to actual
+   quotes. Usually not needed.
+
 yui_compressor
    Compress CSS/JavaScript using `YUI compressor <http://yui.github.io/yuicompressor/>`_
 
@@ -1345,6 +1375,14 @@ optipng
 jpegoptim
    Compress JPEG files using `jpegoptim <http://www.kokkonen.net/tjko/projects.html>`_
 
+cssminify
+   Minify CSS using http://cssminifier.com/ (requires Internet access)
+
+jsminify
+   Minify JS using http://javascript-minifier.com/ (requires Internet access)
+
+jsonminify
+   Minify JSON files (strip whitespace and use minimal separators).
 
 You can apply filters to specific posts or pages by using the ``filters`` metadata field:
 
@@ -1391,8 +1429,10 @@ Math
 ----
 
 Nikola supports math input via MathJax.  It is activated via the math roles and
-directives of reStructuredText and the usual LaTeX delimiters (``\(inline\)``
-and ``\[display\]``) for other input formats.
+directives of reStructuredText and the usual LaTeX delimiters
+(backslash-parentheses, backslash-brackets) for other input formats.
+
+To use mathematics in a post, you must add the ``mathjax`` tag.
 
 We **DO NOT** support the old, deprecated and error-prone ``$inline$``
 delimiters by default. If you want to use them, please add them manually,
@@ -1416,7 +1456,8 @@ like this:
     </script>
     """
 
-Inline mathematics are produced using the reST `math` **role** or the ``\(…\)`` delimiters:
+Inline mathematics are produced using the reST `math` **role** or the LaTeX
+backslash-parentheses delimiters:
 
 Euler’s formula: :math:`e^{ix} = \cos x + i\sin x`
 
@@ -1432,7 +1473,8 @@ In other input formats:
 
     Euler’s formula: \(e^{ix} = \cos x + i\sin x\)
 
-Display mathematics are produced using the reST `math` **directive** or the ``\[…\]`` delimiters:
+Display mathematics are produced using the reST `math` **directive** or the
+LaTeX backslash-brackets delimiters:
 
 .. math::
 
@@ -1880,7 +1922,7 @@ Using Twitter Cards
 Nikola supports Twitter Card summaries, but they are disabled by default.
 
 Twitter Cards enable you to show additional information in Tweets that link
-to you content.
+to your content.
 Nikola supports `Twitter Cards <https://dev.twitter.com/docs/cards>`_.
 They are implemented to use *Open Graph* tags whenever possible.
 

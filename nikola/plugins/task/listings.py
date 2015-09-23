@@ -28,6 +28,7 @@
 
 from __future__ import unicode_literals, print_function
 
+from collections import defaultdict
 import sys
 import os
 import lxml.html
@@ -48,9 +49,7 @@ class Listings(Task):
 
     def register_output_name(self, input_folder, rel_name, rel_output_name):
         """Register proper and improper file mappings."""
-        if rel_name not in self.improper_input_file_mapping:
-            self.improper_input_file_mapping[rel_name] = []
-        self.improper_input_file_mapping[rel_name].append(rel_output_name)
+        self.improper_input_file_mapping[rel_name].add(rel_output_name)
         self.proper_input_file_mapping[os.path.join(input_folder, rel_name)] = rel_output_name
         self.proper_input_file_mapping[rel_output_name] = rel_output_name
 
@@ -85,7 +84,7 @@ class Listings(Task):
         # a list is needed. This is needed for compatibility to previous Nikola
         # versions, where there was no need to specify the input directory name
         # when asking for a link via site.link('listing', ...).
-        self.improper_input_file_mapping = {}
+        self.improper_input_file_mapping = defaultdict(set)
 
         # proper_input_file_mapping maps relative input file (relative to CWD)
         # to a generated output file. Since we don't allow an input directory
@@ -255,7 +254,16 @@ class Listings(Task):
                         }, self.kw["filters"])
 
     def listing_path(self, namep, lang):
-        """Return path to a listing."""
+        """A link to a listing.
+
+        It will try to use the file name if it's not ambiguous, or the file path.
+
+        Example:
+
+        link://listing/hello.py => /listings/tutorial/hello.py.html
+
+        link://listing/tutorial/hello.py => /listings/tutorial/hello.py.html
+        """
         namep = namep.replace('/', os.sep)
         nameh = namep + '.html'
         for name in (namep, nameh):
@@ -271,7 +279,7 @@ class Listings(Task):
                     sys.exit(1)
                 if len(self.site.config['LISTINGS_FOLDERS']) > 1:
                     utils.LOGGER.notice("Using listings names in site.link() without input directory prefix while configuration's LISTINGS_FOLDERS has more than one entry.")
-                name = self.improper_input_file_mapping[name][0]
+                name = list(self.improper_input_file_mapping[name])[0]
                 break
         else:
             utils.LOGGER.error("Unknown listing name {0}!".format(namep))

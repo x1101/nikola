@@ -77,6 +77,8 @@ class RenderPosts(Task):
             deps_dict = copy(kw)
             deps_dict.pop('timeline')
             for post in kw['timeline']:
+                if not post.is_translation_available(lang) and not self.site.config['SHOW_UNTRANSLATED_POSTS']:
+                    continue
                 # Extra config dependencies picked from config
                 for p in post.fragment_deps(lang):
                     if p.startswith('####MAGIC####CONFIG:'):
@@ -114,7 +116,7 @@ class RenderPosts(Task):
                             pass
                     else:
                         flist.append(f)
-                yield utils.apply_filters(task, {os.path.splitext(dest): flist})
+                yield utils.apply_filters(task, {os.path.splitext(dest)[-1]: flist})
 
     def dependence_on_timeline(self, post, lang):
         """Check if a post depends on the timeline."""

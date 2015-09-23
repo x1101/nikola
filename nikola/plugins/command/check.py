@@ -46,7 +46,10 @@ from nikola.plugin_categories import Command
 from nikola.utils import get_logger, STDERR_HANDLER
 
 
-def _call_nikola_list(site):
+def _call_nikola_list(site, cache=None):
+    if cache is not None:
+        if 'files' in cache and 'deps' in cache:
+            return cache['files'], cache['deps']
     files = []
     deps = defaultdict(list)
     for task in generate_tasks('render_site', site.gen_tasks('render_site', "Task", '')):
@@ -57,16 +60,19 @@ def _call_nikola_list(site):
         files.extend(task.targets)
         for target in task.targets:
             deps[target].extend(task.file_dep)
+    if cache is not None:
+        cache['files'] = files
+        cache['deps'] = deps
     return files, deps
 
 
-def real_scan_files(site):
+def real_scan_files(site, cache=None):
     """Scan for files."""
     task_fnames = set([])
     real_fnames = set([])
     output_folder = site.config['OUTPUT_FOLDER']
     # First check that all targets are generated in the right places
-    for fname in _call_nikola_list(site)[0]:
+    for fname in _call_nikola_list(site, cache)[0]:
         fname = fname.strip()
         if fname.startswith(output_folder):
             task_fnames.add(fname)
@@ -162,22 +168,25 @@ class CommandCheck(Command):
             self.logger.level = 1
         else:
             self.logger.level = 4
+        failure = False
         if options['links']:
-            failure = self.scan_links(options['find_sources'], options['remote'])
+            failure |= self.scan_links(options['find_sources'], options['remote'])
         if options['files']:
-            failure = self.scan_files()
+            failure |= self.scan_files()
         if options['clean']:
-            failure = self.clean_files()
+            failure |= self.clean_files()
         if failure:
             return 1
 
     existing_targets = set([])
     checked_remote_targets = {}
+    cache = {}
 
     def analyze(self, fname, find_sources=False, check_remote=False):
         """Analyze links on a page."""
         rv = False
         self.whitelist = [re.compile(x) for x in self.site.config['LINK_CHECK_WHITELIST']]
+        self.internal_redirects = [urljoin('/', _[0]) for _ in self.site.config['REDIRECTIONS']]
         base_url = urlparse(self.site.config['BASE_URL'])
         self.existing_targets.add(self.site.config['SITE_URL'])
         self.existing_targets.add(self.site.config['BASE_URL'])
@@ -185,7 +194,7 @@ class CommandCheck(Command):
 
         deps = {}
         if find_sources:
-            deps = _call_nikola_list(self.site)[1]
+            deps = _call_nikola_list(self.site, self.cache)[1]
 
         if url_type in ('absolute', 'full_path'):
             url_netloc_to_root = urlparse(self.site.config['BASE_URL']).path
@@ -203,17 +212,58 @@ class CommandCheck(Command):
                 # Quietly ignore files that don’t exist; use `nikola check -f` instead (Issue #1831)
                 return False
 
-            d = lxml.html.fromstring(open(filename, 'rb').read())
-            for l in d.iterlinks():
+            if '.html' == fname[-5:]:
+                d = lxml.html.fromstring(open(filename, 'rb').read())
+                extra_objs = lxml.html.fromstring('<html/>')
+
+                # Turn elements with a srcset attribute into individual img elements with src attributes
+                for obj in list(d.xpath('(*//img|*//source)')):
+                    if 'srcset' in obj.attrib:
+                        for srcset_item in obj.attrib['srcset'].split(','):
+                            extra_objs.append(lxml.etree.Element('img', src=srcset_item.strip().split(' ')[0]))
+                link_elements = list(d.iterlinks()) + list(extra_objs.iterlinks())
+            # Extract links from XML formats to minimal HTML, allowing those to go through the link checks
+            elif '.atom' == filename[-5:]:
+                d = lxml.etree.parse(filename)
+                link_elements = lxml.html.fromstring('<html/>')
+                for elm in d.findall('*//{http://www.w3.org/2005/Atom}link'):
+                    feed_link = elm.attrib['href'].split('?')[0].strip()  # strip FEED_LINKS_APPEND_QUERY
+                    link_elements.append(lxml.etree.Element('a', href=feed_link))
+                link_elements = list(link_elements.iterlinks())
+            elif filename.endswith('sitemap.xml') or filename.endswith('sitemapindex.xml'):
+                d = lxml.etree.parse(filename)
+                link_elements = lxml.html.fromstring('<html/>')
+                for elm in d.getroot().findall("*//{http://www.sitemaps.org/schemas/sitemap/0.9}loc"):
+                    link_elements.append(lxml.etree.Element('a', href=elm.text.strip()))
+                link_elements = list(link_elements.iterlinks())
+            else:  # unsupported file type
+                return False
+
+            for l in link_elements:
                 target = l[2]
                 if target == "#":
                     continue
-                target, _ = urldefrag(target)
+                target = urldefrag(target)[0]
+
+                if any([urlparse(target).netloc.endswith(_) for _ in ['example.com', 'example.net', 'example.org']]):
+                    self.logger.info("Not testing example address \"{0}\".".format(target))
+                    continue
+
+                # absolute URL to root-relative
+                if target.startswith(base_url.geturl()):
+                    target = target.replace(base_url.geturl(), '/')
+
                 parsed = urlparse(target)
 
                 # Warn about links from https to http (mixed-security)
                 if base_url.netloc == parsed.netloc and base_url.scheme == "https" and parsed.scheme == "http":
                     self.logger.warn("Mixed-content security for link in {0}: {1}".format(filename, target))
+
+                # Link to an internal REDIRECTIONS page
+                if target in self.internal_redirects:
+                    redir_status_code = 301
+                    redir_target = [_dest for _target, _dest in self.site.config['REDIRECTIONS'] if urljoin('/', _target) == target][0]
+                    self.logger.warn("Remote link moved PERMANENTLY to \"{0}\" and should be updated in {1}: {2} [HTTP: 301]".format(redir_target, filename, target))
 
                 # Absolute links to other domains, skip
                 # Absolute links when using only paths, skip.
@@ -221,12 +271,10 @@ class CommandCheck(Command):
                         ((parsed.scheme or target.startswith('//')) and url_type in ('rel_path', 'full_path')):
                     if not check_remote or parsed.scheme not in ["http", "https"]:
                         continue
-                    if parsed.netloc == base_url.netloc:  # absolute URL to self.site
-                        continue
                     if target in self.checked_remote_targets:  # already checked this exact target
-                        if self.checked_remote_targets[target] in [301, 307]:
+                        if self.checked_remote_targets[target] in [301, 308]:
                             self.logger.warn("Remote link PERMANENTLY redirected in {0}: {1} [Error {2}]".format(filename, target, self.checked_remote_targets[target]))
-                        elif self.checked_remote_targets[target] in [302, 308]:
+                        elif self.checked_remote_targets[target] in [302, 307]:
                             self.logger.info("Remote link temporarily redirected in {1}: {2} [HTTP: {3}]".format(filename, target, self.checked_remote_targets[target]))
                         elif self.checked_remote_targets[target] > 399:
                             self.logger.error("Broken link in {0}: {1} [Error {2}]".format(filename, target, self.checked_remote_targets[target]))
@@ -275,8 +323,9 @@ class CommandCheck(Command):
                         target_filename = os.path.abspath(
                             os.path.join(self.site.config['OUTPUT_FOLDER'], unquote(target.lstrip('/'))))
                     else:  # Relative path
+                        unquoted_target = unquote(target).encode('utf-8') if sys.version_info.major >= 3 else unquote(target).decode('utf-8')
                         target_filename = os.path.abspath(
-                            os.path.join(os.path.dirname(filename), unquote(target)))
+                            os.path.join(os.path.dirname(filename).encode('utf-8'), unquoted_target))
 
                 elif url_type in ('full_path', 'absolute'):
                     if url_type == 'absolute':
@@ -292,9 +341,10 @@ class CommandCheck(Command):
 
                 if any(re.search(x, target_filename) for x in self.whitelist):
                     continue
+
                 elif target_filename not in self.existing_targets:
                     if os.path.exists(target_filename):
-                        self.logger.notice("Good link {0} => {1}".format(target, target_filename))
+                        self.logger.notice(u"Good link {0} => {1}".format(target, target_filename))
                         self.existing_targets.add(target_filename)
                     else:
                         rv = True
@@ -304,7 +354,7 @@ class CommandCheck(Command):
                             self.logger.warn("\n".join(deps[filename]))
                             self.logger.warn("===============================\n")
         except Exception as exc:
-            self.logger.error("Error with: {0} {1}".format(filename, exc))
+            self.logger.error(u"Error with: {0} {1}".format(filename, exc))
         return rv
 
     def scan_links(self, find_sources=False, check_remote=False):
@@ -315,10 +365,21 @@ class CommandCheck(Command):
         failure = False
         # Maybe we should just examine all HTML files
         output_folder = self.site.config['OUTPUT_FOLDER']
-        for fname in _call_nikola_list(self.site)[0]:
-            if fname.startswith(output_folder) and '.html' == fname[-5:]:
-                if self.analyze(fname, find_sources, check_remote):
-                    failure = True
+
+        if urlparse(self.site.config['BASE_URL']).netloc == 'example.com':
+            self.logger.error("You've not changed the SITE_URL (or BASE_URL) setting from \"example.com\"!")
+
+        for fname in _call_nikola_list(self.site, self.cache)[0]:
+            if fname.startswith(output_folder):
+                if '.html' == fname[-5:]:
+                    if self.analyze(fname, find_sources, check_remote):
+                        failure = True
+                if '.atom' == fname[-5:]:
+                    if self.analyze(fname, find_sources, False):
+                        failure = True
+                if fname.endswith('sitemap.xml') or fname.endswith('sitemapindex.xml'):
+                    if self.analyze(fname, find_sources, False):
+                        failure = True
         if not failure:
             self.logger.info("All links checked.")
         return failure
@@ -328,7 +389,7 @@ class CommandCheck(Command):
         failure = False
         self.logger.info("Checking Files:")
         self.logger.info("===============\n")
-        only_on_output, only_on_input = real_scan_files(self.site)
+        only_on_output, only_on_input = real_scan_files(self.site, self.cache)
 
         # Ignore folders
         only_on_output = [p for p in only_on_output if not os.path.isdir(p)]
@@ -351,7 +412,7 @@ class CommandCheck(Command):
 
     def clean_files(self):
         """Remove orphaned files."""
-        only_on_output, _ = real_scan_files(self.site)
+        only_on_output, _ = real_scan_files(self.site, self.cache)
         for f in only_on_output:
             self.logger.info('removed: {0}'.format(f))
             os.unlink(f)

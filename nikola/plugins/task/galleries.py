@@ -126,20 +126,45 @@ class Galleries(Task, ImageProcessor):
         sys.exit(1)
 
     def gallery_path(self, name, lang):
-        """Return a gallery path."""
+        """Link to an image gallery's path.
+
+        It will try to find a gallery with that name if it's not ambiguous
+        or with that path. For example:
+
+        link://gallery/london => /galleries/trips/london/index.html
+
+        link://gallery/trips/london => /galleries/trips/london/index.html
+        """
         gallery_path = self._find_gallery_path(name)
         return [_f for _f in [self.site.config['TRANSLATIONS'][lang]] +
                 gallery_path.split(os.sep) +
                 [self.site.config['INDEX_FILE']] if _f]
 
     def gallery_global_path(self, name, lang):
-        """Return the global gallery path, which contains images."""
+        """Link to the global gallery path, which contains all the images in galleries.
+
+        There is only one copy of an image on multilingual blogs, in the site root.
+
+        link://gallery_global/london => /galleries/trips/london/index.html
+
+        link://gallery_global/trips/london => /galleries/trips/london/index.html
+
+        (a ``gallery`` link could lead to eg. /en/galleries/trips/london/index.html)
+        """
         gallery_path = self._find_gallery_path(name)
         return [_f for _f in gallery_path.split(os.sep) +
                 [self.site.config['INDEX_FILE']] if _f]
 
     def gallery_rss_path(self, name, lang):
-        """Return path to the RSS file for a gallery."""
+        """Link to an image gallery's RSS feed.
+
+        It will try to find a gallery with that name if it's not ambiguous
+        or with that path. For example:
+
+        link://gallery_rss/london => /galleries/trips/london/rss.xml
+
+        link://gallery_rss/trips/london => /galleries/trips/london/rss.xml
+        """
         gallery_path = self._find_gallery_path(name)
         return [_f for _f in [self.site.config['TRANSLATIONS'][lang]] +
                 gallery_path.split(os.sep) +
@@ -553,9 +578,12 @@ class Galleries(Task, ImageProcessor):
         for img, thumb, title in zip(img_list, thumbs, img_titles):
             w, h = _image_size_cache.get(thumb, (None, None))
             if w is None:
-                im = Image.open(thumb)
-                w, h = im.size
-                _image_size_cache[thumb] = w, h
+                if os.path.splitext(thumb)[1] in ['.svg', '.svgz']:
+                    w, h = 200, 200
+                else:
+                    im = Image.open(thumb)
+                    w, h = im.size
+                    _image_size_cache[thumb] = w, h
             # Thumbs are files in output, we need URLs
             photo_array.append({
                 'url': url_from_path(img),
@@ -602,7 +630,7 @@ class Galleries(Task, ImageProcessor):
             description='',
             lastBuildDate=datetime.datetime.utcnow(),
             items=items,
-            generator='http://getnikola.com/',
+            generator='https://getnikola.com/',
             language=lang
         )
 

@@ -74,9 +74,9 @@ class RenderTags(Task):
             'category_prefix': self.site.config['CATEGORY_PREFIX'],
             "category_pages_are_indexes": self.site.config['CATEGORY_PAGES_ARE_INDEXES'],
             "generate_rss": self.site.config['GENERATE_RSS'],
-            "rss_teasers": self.site.config["RSS_TEASERS"],
-            "rss_plain": self.site.config["RSS_PLAIN"],
-            "rss_link_append_query": self.site.config["RSS_LINKS_APPEND_QUERY"],
+            "feed_teasers": self.site.config["FEED_TEASERS"],
+            "feed_plain": self.site.config["FEED_PLAIN"],
+            "feed_link_append_query": self.site.config["FEED_LINKS_APPEND_QUERY"],
             "show_untranslated_posts": self.site.config['SHOW_UNTRANSLATED_POSTS'],
             "feed_length": self.site.config['FEED_LENGTH'],
             "taglist_minimum_post_count": self.site.config['TAGLIST_MINIMUM_POSTS'],
@@ -84,6 +84,10 @@ class RenderTags(Task):
             "pretty_urls": self.site.config['PRETTY_URLS'],
             "strip_indexes": self.site.config['STRIP_INDEXES'],
             "index_file": self.site.config['INDEX_FILE'],
+            "category_pages_descriptions": self.site.config['CATEGORY_PAGES_DESCRIPTIONS'],
+            "category_pages_titles": self.site.config['CATEGORY_PAGES_TITLES'],
+            "tag_pages_descriptions": self.site.config['TAG_PAGES_DESCRIPTIONS'],
+            "tag_pages_titles": self.site.config['TAG_PAGES_TITLES'],
         }
 
         self.site.scan_posts()
@@ -199,7 +203,6 @@ class RenderTags(Task):
                 kw['tags'] = tags
             output_name = os.path.join(
                 kw['output_folder'], self.site.path('tag_index' if has_tags else 'category_index', None, lang))
-            output_name = output_name
             context = {}
             if has_categories and has_tags:
                 context["title"] = kw["messages"][lang]["Tags and Categories"]
@@ -251,6 +254,10 @@ class RenderTags(Task):
         else:
             return tag
 
+    def _get_indexes_title(self, tag, is_category, lang, messages):
+        titles = self.site.config['CATEGORY_PAGES_TITLES'] if is_category else self.site.config['TAG_PAGES_TITLES']
+        return titles[lang][tag] if lang in titles and tag in titles[lang] else messages[lang]["Posts about %s"] % tag
+
     def _get_description(self, tag, is_category, lang):
         descriptions = self.site.config['CATEGORY_PAGES_DESCRIPTIONS'] if is_category else self.site.config['TAG_PAGES_DESCRIPTIONS']
         return descriptions[lang][tag] if lang in descriptions and tag in descriptions[lang] else None
@@ -276,7 +283,7 @@ class RenderTags(Task):
         if kw["generate_rss"]:
             # On a tag page, the feeds include the tag's feeds
             rss_link = ("""<link rel="alternate" type="application/rss+xml" """
-                        """type="application/rss+xml" title="RSS for tag """
+                        """title="RSS for tag """
                         """{0} ({1})" href="{2}">""".format(
                             title, lang, self.site.link(kind + "_rss", tag, lang)))
             context_source['rss_link'] = rss_link
@@ -284,7 +291,7 @@ class RenderTags(Task):
             context_source["category"] = tag
             context_source["category_path"] = self.site.parse_category_name(tag)
         context_source["tag"] = title
-        indexes_title = kw["messages"][lang]["Posts about %s"] % title
+        indexes_title = self._get_indexes_title(title, is_category, lang, kw["messages"])
         context_source["description"] = self._get_description(tag, is_category, lang)
         if is_category:
             context_source["subcategories"] = self._get_subcategories(tag)
@@ -306,7 +313,7 @@ class RenderTags(Task):
             context["category"] = tag
             context["category_path"] = self.site.parse_category_name(tag)
         context["tag"] = title
-        context["title"] = kw["messages"][lang]["Posts about %s"] % title
+        context["title"] = self._get_indexes_title(title, is_category, lang, kw["messages"])
         context["posts"] = post_list
         context["permalink"] = self.site.link(kind, tag, lang)
         context["kind"] = kind
@@ -325,6 +332,29 @@ class RenderTags(Task):
         task['uptodate'] = task['uptodate'] + [utils.config_changed(kw, 'nikola.plugins.task.tags:list')]
         task['basename'] = str(self.name)
         yield task
+
+        if self.site.config['GENERATE_ATOM']:
+            yield self.atom_feed_list(kind, tag, lang, post_list, context, kw)
+
+    def atom_feed_list(self, kind, tag, lang, post_list, context, kw):
+        """Generate atom feeds for tag lists."""
+        if kind == 'tag':
+            context['feedlink'] = self.site.abs_link(self.site.path('tag_atom', tag, lang))
+            feed_path = os.path.join(kw['output_folder'], self.site.path('tag_atom', tag, lang))
+        elif kind == 'category':
+            context['feedlink'] = self.site.abs_link(self.site.path('category_atom', tag, lang))
+            feed_path = os.path.join(kw['output_folder'], self.site.path('category_atom', tag, lang))
+
+        task = {
+            'basename': str(self.name),
+            'name': feed_path,
+            'targets': [feed_path],
+            'actions': [(self.site.atom_feed_renderer, (lang, post_list, feed_path, kw['filters'], context))],
+            'clean': True,
+            'uptodate': [utils.config_changed(kw, 'nikola.plugins.task.tags:atom')],
+            'task_dep': ['render_posts'],
+        }
+        return task
 
     def tag_rss(self, tag, lang, posts, kw, is_category):
         """Create a RSS feed for a single tag in a given language."""
@@ -349,8 +379,8 @@ class RenderTags(Task):
             'actions': [(utils.generic_rss_renderer,
                         (lang, "{0} ({1})".format(kw["blog_title"](lang), self._get_title(tag, is_category)),
                          kw["site_url"], None, post_list,
-                         output_name, kw["rss_teasers"], kw["rss_plain"], kw['feed_length'],
-                         feed_url, None, kw["rss_link_append_query"]))],
+                         output_name, kw["feed_teasers"], kw["feed_plain"], kw['feed_length'],
+                         feed_url, None, kw["feed_link_append_query"]))],
             'clean': True,
             'uptodate': [utils.config_changed(kw, 'nikola.plugins.task.tags:rss')] + deps_uptodate,
             'task_dep': ['render_posts'],
@@ -364,41 +394,66 @@ class RenderTags(Task):
         return name
 
     def tag_index_path(self, name, lang):
-        """Return path to the tag index."""
+        """A link to the tag index.
+
+        Example:
+
+        link://tag_index => /tags/index.html
+        """
         return [_f for _f in [self.site.config['TRANSLATIONS'][lang],
-                              self.site.config['TAG_PATH'],
+                              self.site.config['TAG_PATH'][lang],
                               self.site.config['INDEX_FILE']] if _f]
 
     def category_index_path(self, name, lang):
-        """Return path to the category index."""
+        """A link to the category index.
+
+        Example:
+
+        link://category_index => /categories/index.html
+        """
         return [_f for _f in [self.site.config['TRANSLATIONS'][lang],
-                              self.site.config['CATEGORY_PATH'],
+                              self.site.config['CATEGORY_PATH'][lang],
                               self.site.config['INDEX_FILE']] if _f]
 
     def tag_path(self, name, lang):
-        """Return path to a tag."""
+        """A link to a tag's page.
+
+        Example:
+
+        link://tag/cats => /tags/cats.html
+        """
         if self.site.config['PRETTY_URLS']:
             return [_f for _f in [
                 self.site.config['TRANSLATIONS'][lang],
-                self.site.config['TAG_PATH'],
+                self.site.config['TAG_PATH'][lang],
                 self.slugify_tag_name(name),
                 self.site.config['INDEX_FILE']] if _f]
         else:
             return [_f for _f in [
                 self.site.config['TRANSLATIONS'][lang],
-                self.site.config['TAG_PATH'],
+                self.site.config['TAG_PATH'][lang],
                 self.slugify_tag_name(name) + ".html"] if _f]
 
     def tag_atom_path(self, name, lang):
-        """Return path to a tag Atom feed."""
+        """A link to a tag's Atom feed.
+
+        Example:
+
+        link://tag_atom/cats => /tags/cats.atom
+        """
         return [_f for _f in [self.site.config['TRANSLATIONS'][lang],
-                              self.site.config['TAG_PATH'], self.slugify_tag_name(name) + ".atom"] if
+                              self.site.config['TAG_PATH'][lang], self.slugify_tag_name(name) + ".atom"] if
                 _f]
 
     def tag_rss_path(self, name, lang):
-        """Return path to a tag RSS feed."""
+        """A link to a tag's RSS feed.
+
+        Example:
+
+        link://tag_rss/cats => /tags/cats.xml
+        """
         return [_f for _f in [self.site.config['TRANSLATIONS'][lang],
-                              self.site.config['TAG_PATH'], self.slugify_tag_name(name) + ".xml"] if
+                              self.site.config['TAG_PATH'][lang], self.slugify_tag_name(name) + ".xml"] if
                 _f]
 
     def slugify_category_name(self, name):
@@ -417,24 +472,39 @@ class RenderTags(Task):
         return path
 
     def category_path(self, name, lang):
-        """Return path to a category."""
+        """A link to a category.
+
+        Example:
+
+        link://category/dogs => /categories/dogs.html
+        """
         if self.site.config['PRETTY_URLS']:
             return [_f for _f in [self.site.config['TRANSLATIONS'][lang],
-                                  self.site.config['CATEGORY_PATH']] if
+                                  self.site.config['CATEGORY_PATH'][lang]] if
                     _f] + self.slugify_category_name(name) + [self.site.config['INDEX_FILE']]
         else:
             return [_f for _f in [self.site.config['TRANSLATIONS'][lang],
-                                  self.site.config['CATEGORY_PATH']] if
+                                  self.site.config['CATEGORY_PATH'][lang]] if
                     _f] + self._add_extension(self.slugify_category_name(name), ".html")
 
     def category_atom_path(self, name, lang):
-        """Return path to a category Atom feed."""
+        """A link to a category's Atom feed.
+
+        Example:
+
+        link://category_atom/dogs => /categories/dogs.atom
+        """
         return [_f for _f in [self.site.config['TRANSLATIONS'][lang],
-                              self.site.config['CATEGORY_PATH']] if
+                              self.site.config['CATEGORY_PATH'][lang]] if
                 _f] + self._add_extension(self.slugify_category_name(name), ".atom")
 
     def category_rss_path(self, name, lang):
-        """Return path to a category RSS feed."""
+        """A link to a category's RSS feed.
+
+        Example:
+
+        link://category_rss/dogs => /categories/dogs.xml
+        """
         return [_f for _f in [self.site.config['TRANSLATIONS'][lang],
-                              self.site.config['CATEGORY_PATH']] if
+                              self.site.config['CATEGORY_PATH'][lang]] if
                 _f] + self._add_extension(self.slugify_category_name(name), ".xml")

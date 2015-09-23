@@ -31,6 +31,7 @@ import io
 import datetime
 import dateutil.tz
 import os
+import sys
 try:
     from urlparse import urljoin, urlparse
     import robotparser as robotparser
@@ -39,7 +40,7 @@ except ImportError:
     import urllib.robotparser as robotparser  # NOQA
 
 from nikola.plugin_categories import LateTask
-from nikola.utils import config_changed, apply_filters
+from nikola.utils import apply_filters, config_changed, encodelink
 
 
 urlset_header = """<?xml version="1.0" encoding="UTF-8"?>
@@ -146,7 +147,10 @@ class Sitemap(LateTask):
                     continue  # Totally empty, not on sitemap
                 path = os.path.relpath(root, output)
                 # ignore the current directory.
-                path = (path.replace(os.sep, '/') + '/').replace('./', '')
+                if path == '.':
+                    path = ''
+                else:
+                    path = path.replace(os.sep, '/') + '/'
                 lastmod = self.get_lastmod(root)
                 loc = urljoin(base_url, base_path + path)
                 if kw['index_file'] in files and kw['strip_indexes']:  # ignore folders when not stripping urls
@@ -157,10 +161,10 @@ class Sitemap(LateTask):
                     if post:
                         for lang in kw['translations']:
                             alt_url = post.permalink(lang=lang, absolute=True)
-                            if loc == alt_url:
+                            if encodelink(loc) == alt_url:
                                 continue
                             alternates.append(alternates_format.format(lang, alt_url))
-                    urlset[loc] = loc_format.format(loc, lastmod, ''.join(alternates))
+                    urlset[loc] = loc_format.format(encodelink(loc), lastmod, ''.join(alternates))
                 for fname in files:
                     if kw['strip_indexes'] and fname == kw['index_file']:
                         continue  # We already mapped the folder
@@ -200,7 +204,7 @@ class Sitemap(LateTask):
                                 path = path.replace(os.sep, '/')
                                 lastmod = self.get_lastmod(real_path)
                                 loc = urljoin(base_url, base_path + path)
-                                sitemapindex[loc] = sitemap_format.format(loc, lastmod)
+                                sitemapindex[loc] = sitemap_format.format(encodelink(loc), lastmod)
                                 continue
                             else:
                                 continue  # ignores all XML files except those presumed to be RSS
@@ -214,18 +218,22 @@ class Sitemap(LateTask):
                         if post:
                             for lang in kw['translations']:
                                 alt_url = post.permalink(lang=lang, absolute=True)
-                                if loc == alt_url:
+                                if encodelink(loc) == alt_url:
                                     continue
                                 alternates.append(alternates_format.format(lang, alt_url))
-                        urlset[loc] = loc_format.format(loc, lastmod, '\n'.join(alternates))
+                        urlset[loc] = loc_format.format(encodelink(loc), lastmod, '\n'.join(alternates))
 
         def robot_fetch(path):
             """Check if robots can fetch a file."""
             for rule in kw["robots_exclusions"]:
                 robot = robotparser.RobotFileParser()
                 robot.parse(["User-Agent: *", "Disallow: {0}".format(rule)])
-                if not robot.can_fetch("*", '/' + path):
-                    return False  # not robot food
+                if sys.version_info[0] == 3:
+                    if not robot.can_fetch("*", '/' + path):
+                        return False  # not robot food
+                else:
+                    if not robot.can_fetch("*", ('/' + path).encode('utf-8')):
+                        return False  # not robot food
             return True
 
         def write_sitemap():

@@ -26,19 +26,23 @@
 
 """Utility functions to help run filters on files."""
 
-from .utils import req_missing
 from functools import wraps
 import os
 import io
+import json
 import shutil
 import subprocess
 import tempfile
 import shlex
 
+import lxml
 try:
     import typogrify.filters as typo
 except ImportError:
     typo = None  # NOQA
+import requests
+
+from .utils import req_missing, LOGGER
 
 
 def apply_to_binary_file(f):
@@ -234,6 +238,7 @@ def typogrify(data):
     if typo is None:
         req_missing(['typogrify'], 'use the typogrify filter')
 
+    data = _normalize_html(data)
     data = typo.amp(data)
     data = typo.widont(data)
     data = typo.smartypants(data)
@@ -251,6 +256,7 @@ def typogrify_sans_widont(data):
     if typo is None:
         req_missing(['typogrify'], 'use the typogrify_sans_widont filter')
 
+    data = _normalize_html(data)
     data = typo.amp(data)
     data = typo.smartypants(data)
     # Disabled because of typogrify bug where it breaks <title>
@@ -274,3 +280,48 @@ def php_template_injection(data):
         return phpdata
     else:
         return data
+
+
+@apply_to_text_file
+def cssminify(data):
+    """Minify CSS using http://cssminifier.com/."""
+    try:
+        url = 'http://cssminifier.com/raw'
+        _data = {'input': data}
+        response = requests.post(url, data=_data)
+        return response.text
+    except Exception as exc:
+        LOGGER.error("can't use cssminifier.com: {}", exc)
+        return data
+
+
+@apply_to_text_file
+def jsminify(data):
+    """Minify JS using http://javascript-minifier.com/."""
+    try:
+        url = 'http://javascript-minifier.com/raw'
+        _data = {'input': data}
+        response = requests.post(url, data=_data)
+        return response.text
+    except Exception as exc:
+        LOGGER.error("can't use javascript-minifier.com: {}", exc)
+        return data
+
+
+@apply_to_text_file
+def jsonminify(data):
+    """Minify JSON files (strip whitespace and use minimal separators)."""
+    data = json.dumps(json.loads(data), indent=None, separators=(',', ':'))
+    return data
+
+
+def _normalize_html(data):
+    """Pass HTML through LXML to clean it up, if possible."""
+    try:
+        data = lxml.html.tostring(lxml.html.fromstring(data), encoding='unicode')
+    except:
+        pass
+    return data
+
+
+normalize_html = apply_to_text_file(_normalize_html)

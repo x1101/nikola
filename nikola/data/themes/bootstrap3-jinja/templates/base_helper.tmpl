@@ -26,9 +26,11 @@ dir="rtl"
 lang="{{ lang }}">
     <head>
     <meta charset="utf-8">
+    {% if use_base_tag %}
     <base href="{{ abs_link(permalink) }}">
+    {% endif %}
     {% if description %}
-    <meta name="description" content="{{ description }}">
+    <meta name="description" content="{{ description|e }}">
     {% endif %}
     <meta name="viewport" content="width=device-width, initial-scale=1">
     {% if title == blog_title %}
@@ -38,6 +40,7 @@ lang="{{ lang }}">
     {% endif %}
 
     {{ html_stylesheets() }}
+    <meta content="{{ theme_color }}" name="theme-color">
     {{ html_feedlinks() }}
     <link rel="canonical" href="{{ abs_link(permalink) }}">
 

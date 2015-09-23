@@ -61,10 +61,7 @@ class CopyAssets(Task):
         code_css_path = os.path.join(kw['output_folder'], 'assets', 'css', 'code.css')
         code_css_input = utils.get_asset_path('assets/css/code.css',
                                               themes=kw['themes'],
-                                              files_folders=kw['files_folders'])
-
-        kw["code.css_input"] = code_css_input
-
+                                              files_folders=kw['files_folders'], output_dir=None)
         yield self.group_task()
 
         for theme_name in kw['themes']:
@@ -77,7 +74,9 @@ class CopyAssets(Task):
                 task['uptodate'] = [utils.config_changed(kw, 'nikola.plugins.task.copy_assets')]
                 task['basename'] = self.name
                 if code_css_input:
-                    task['file_dep'] = [code_css_input]
+                    if 'file_dep' not in task:
+                        task['file_dep'] = []
+                    task['file_dep'].append(code_css_input)
                 yield utils.apply_filters(task, kw['filters'])
 
         # Check whether or not there is a code.css file around.

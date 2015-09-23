@@ -31,6 +31,7 @@ import calendar
 import datetime
 import dateutil.tz
 import hashlib
+import husl
 import io
 import locale
 import logging
@@ -44,15 +45,24 @@ import sys
 import dateutil.parser
 import dateutil.tz
 import logbook
+try:
+    from urllib import quote as urlquote
+    from urllib import unquote as urlunquote
+    from urlparse import urlparse, urlunparse
+except ImportError:
+    from urllib.parse import quote as urlquote  # NOQA
+    from urllib.parse import unquote as urlunquote  # NOQA
+    from urllib.parse import urlparse, urlunparse  # NOQA
 import warnings
 import PyRSS2Gen as rss
-from collections import defaultdict, Callable
+from collections import defaultdict, Callable, OrderedDict
 from logbook.compat import redirect_logging
 from logbook.more import ExceptionHandler, ColorizedStderrHandler
 from pygments.formatters import HtmlFormatter
 from zipfile import ZipFile as zipf
 from doit import tools
 from unidecode import unidecode
+from unicodedata import normalize as unicodenormalize
 from pkg_resources import resource_filename
 from doit.cmdparse import CmdParse
 
@@ -724,7 +734,7 @@ def remove_file(source):
     elif os.path.isfile(source) or os.path.islink(source):
         os.remove(source)
 
-# slugify is copied from
+# slugify is adopted from
 # http://code.activestate.com/recipes/
 # 577257-slugify-make-a-string-usable-in-a-url-or-filename/
 _slugify_strip_re = re.compile(r'[^+\w\s-]')
@@ -782,8 +792,21 @@ def unslugify(value, discard_numbers=True):
     return value
 
 
+def encodelink(iri):
+    """Given an encoded or unencoded link string, return an encoded string suitable for use as a link in HTML and XML."""
+    iri = unicodenormalize('NFC', iri)
+    link = OrderedDict(urlparse(iri)._asdict())
+    link['path'] = urlquote(urlunquote(link['path']).encode('utf-8'))
+    try:
+        link['netloc'] = link['netloc'].encode('utf-8').decode('idna').encode('idna').decode('utf-8')
+    except UnicodeDecodeError:
+        link['netloc'] = link['netloc'].encode('idna').decode('utf-8')
+    encoded_link = urlunparse(link.values())
+    return encoded_link
+
 # A very slightly safer version of zip.extractall that works on
 # python < 2.6
+
 
 class UnsafeZipException(Exception):
 
@@ -945,12 +968,14 @@ def get_crumbs(path, is_file=False, index_folder=None):
     return list(reversed(_crumbs))
 
 
-def get_asset_path(path, themes, files_folders={'files': ''}, _themes_dir='themes'):
+def get_asset_path(path, themes, files_folders={'files': ''}, _themes_dir='themes', output_dir='output'):
     """Return the "real", absolute path to the asset.
 
     By default, it checks which theme provides the asset.
     If the asset is not provided by a theme, then it will be checked for
     in the FILES_FOLDERS.
+    If it's not provided by either, it will be chacked in output, where
+    it may have been created by another plugin.
 
     >>> print(get_asset_path('assets/css/rst.css', ['bootstrap3', 'base']))
     /.../nikola/data/themes/base/assets/css/rst.css
@@ -961,8 +986,11 @@ def get_asset_path(path, themes, files_folders={'files': ''}, _themes_dir='theme
     >>> print(get_asset_path('nikola.py', ['bootstrap3', 'base'], {'nikola': ''}))
     /.../nikola/nikola.py
 
-    >>> print(get_asset_path('nikola/nikola.py', ['bootstrap3', 'base'], {'nikola':'nikola'}))
+    >>> print(get_asset_path('nikola.py', ['bootstrap3', 'base'], {'nikola': 'nikola'}))
     None
+
+    >>> print(get_asset_path('nikola/nikola.py', ['bootstrap3', 'base'], {'nikola': 'nikola'}))
+    /.../nikola/nikola.py
 
     """
     for theme_name in themes:
@@ -973,7 +1001,14 @@ def get_asset_path(path, themes, files_folders={'files': ''}, _themes_dir='theme
         if os.path.isfile(candidate):
             return candidate
     for src, rel_dst in files_folders.items():
-        candidate = os.path.abspath(os.path.join(src, path))
+        relpath = os.path.normpath(os.path.relpath(path, rel_dst))
+        if not relpath.startswith('..' + os.path.sep):
+            candidate = os.path.abspath(os.path.join(src, relpath))
+            if os.path.isfile(candidate):
+                return candidate
+
+    if output_dir:
+        candidate = os.path.join(output_dir, path)
         if os.path.isfile(candidate):
             return candidate
 
@@ -1040,6 +1075,8 @@ class LocaleBorg(object):
         assert initial_lang is not None and initial_lang in locales
         cls.reset()
         cls.locales = locales
+        cls.month_name_handlers = []
+        cls.formatted_date_handlers = []
 
         # needed to decode some localized output in py2x
         encodings = {}
@@ -1049,8 +1086,17 @@ class LocaleBorg(object):
             encodings[lang] = encoding
 
         cls.encodings = encodings
-        cls.__shared_state['current_lang'] = initial_lang
+        cls.__initial_lang = initial_lang
         cls.initialized = True
+
+    def __get_shared_state(self):
+        if not self.initialized:
+            raise LocaleBorgUninitializedException()
+        shared_state = getattr(self.__thread_local, 'shared_state', None)
+        if shared_state is None:
+            shared_state = {'current_lang': self.__initial_lang}
+            self.__thread_local.shared_state = shared_state
+        return shared_state
 
     @classmethod
     def reset(cls):
@@ -1058,16 +1104,53 @@ class LocaleBorg(object):
 
         Used in testing to prevent leaking state between tests.
         """
+        import threading
+        cls.__thread_local = threading.local()
+        cls.__thread_lock = threading.Lock()
+
         cls.locales = {}
         cls.encodings = {}
-        cls.__shared_state = {'current_lang': None}
         cls.initialized = False
+        cls.month_name_handlers = []
+        cls.formatted_date_handlers = []
+        cls.thread_local = None
+        cls.thread_lock = None
+
+    @classmethod
+    def add_handler(cls, month_name_handler=None, formatted_date_handler=None):
+        """Allow to add month name and formatted date handlers.
+
+        If month_name_handler is not None, it is expected to be a callable
+        which accepts (month_no, lang) and returns either a string or None.
+
+        If formatted_date_handler is not None, it is expected to be a callable
+        which accepts (date_format, date, lang) and returns either a string or
+        None.
+
+        A handler is expected to either return the correct result for the given
+        language and data, or return None to indicate it is not able to do the
+        job. In that case, the next handler is asked, and finally the default
+        implementation is used.
+        """
+        if month_name_handler is not None:
+            cls.month_name_handlers.append(month_name_handler)
+        if formatted_date_handler is not None:
+            cls.formatted_date_handlers.append(formatted_date_handler)
 
     def __init__(self):
         """Initialize."""
         if not self.initialized:
             raise LocaleBorgUninitializedException()
-        self.__dict__ = self.__shared_state
+
+    @property
+    def current_lang(self):
+        """Return the current language."""
+        return self.__get_shared_state()['current_lang']
+
+    def __set_locale(self, lang):
+        """Set the locale for language lang without updating current_lang."""
+        locale_n = self.locales[lang]
+        locale.setlocale(locale.LC_ALL, locale_n)
 
     def set_locale(self, lang):
         """Set the locale for language lang, returns an empty string.
@@ -1076,32 +1159,64 @@ class LocaleBorg(object):
         in windows that cannot be guaranted.
         In either case, the locale encoding is available in cls.encodings[lang]
         """
-        # intentional non try-except: templates must ask locales with a lang,
-        # let the code explode here and not hide the point of failure
-        # Also, not guarded with an if lang==current_lang because calendar may
-        # put that out of sync
-        locale_n = self.locales[lang]
-        self.__shared_state['current_lang'] = lang
-        locale.setlocale(locale.LC_ALL, locale_n)
-        return ''
+        with self.__thread_lock:
+            # intentional non try-except: templates must ask locales with a lang,
+            # let the code explode here and not hide the point of failure
+            # Also, not guarded with an if lang==current_lang because calendar may
+            # put that out of sync
+            self.__set_locale(lang)
+            self.__get_shared_state()['current_lang'] = lang
+            return ''
 
     def get_month_name(self, month_no, lang):
         """Return localized month name in an unicode string."""
-        if sys.version_info[0] == 3:  # Python 3
-            with calendar.different_locale(self.locales[lang]):
-                s = calendar.month_name[month_no]
-            # for py3 s is unicode
-        else:  # Python 2
-            with calendar.TimeEncoding(self.locales[lang]):
-                s = calendar.month_name[month_no]
-            enc = self.encodings[lang]
-            if not enc:
-                enc = 'UTF-8'
+        # For thread-safety
+        with self.__thread_lock:
+            for handler in self.month_name_handlers:
+                res = handler(month_no, lang)
+                if res is not None:
+                    return res
+            if sys.version_info[0] == 3:  # Python 3
+                with calendar.different_locale(self.locales[lang]):
+                    s = calendar.month_name[month_no]
+                # for py3 s is unicode
+            else:  # Python 2
+                with calendar.TimeEncoding(self.locales[lang]):
+                    s = calendar.month_name[month_no]
+                enc = self.encodings[lang]
+                if not enc:
+                    enc = 'UTF-8'
 
-            s = s.decode(enc)
-        # paranoid about calendar ending in the wrong locale (windows)
-        self.set_locale(self.current_lang)
-        return s
+                s = s.decode(enc)
+            # paranoid about calendar ending in the wrong locale (windows)
+            self.__set_locale(self.current_lang)
+            return s
+
+    def formatted_date(self, date_format, date):
+        """Return the formatted date as unicode."""
+        with self.__thread_lock:
+            current_lang = self.current_lang
+            # For thread-safety
+            self.__set_locale(current_lang)
+            fmt_date = None
+            # First check handlers
+            for handler in self.formatted_date_handlers:
+                fmt_date = handler(date_format, date, current_lang)
+                if fmt_date is not None:
+                    break
+            # If no handler was able to format the date, ask Python
+            if fmt_date is None:
+                if date_format == 'webiso':
+                    # Formatted after RFC 3339 (web ISO 8501 profile) with Zulu
+                    # zone desgignator for times in UTC and no microsecond precision.
+                    fmt_date = date.replace(microsecond=0).isoformat().replace('+00:00', 'Z')
+                else:
+                    fmt_date = date.strftime(date_format)
+
+            # Issue #383, this changes from py2 to py3
+            if isinstance(fmt_date, bytes_str):
+                fmt_date = fmt_date.decode('utf8')
+            return fmt_date
 
 
 class ExtendedRSS2(rss.RSS2):
@@ -1671,6 +1786,47 @@ def join_hierarchical_category_path(category_path):
         return s.replace('\\', '\\\\').replace('/', '\\/')
 
     return '/'.join([escape(p) for p in category_path])
+
+
+def colorize_str_from_base_color(string, base_color):
+    """Find a perceptual similar color from a base color based on the hash of a string.
+
+    Make up to 16 attempts (number of bytes returned by hashing) at picking a
+    hue for our color at least 27 deg removed from the base color, leaving
+    lightness and saturation untouched using HUSL colorspace.
+    """
+    def hash_str(string, pos):
+        return hashlib.md5(string.encode('utf-8')).digest()[pos]
+
+    def degreediff(dega, degb):
+        return min(abs(dega - degb), abs((degb - dega) + 360))
+
+    def husl_similar_from_base(string, base_color):
+        h, s, l = husl.hex_to_husl(base_color)
+        old_h = h
+        idx = 0
+        while degreediff(old_h, h) < 27 and idx < 16:
+            h = 360.0 * (float(hash_str(string, idx)) / 255)
+            idx += 1
+        return husl.husl_to_hex(h, s, l)
+
+    return husl_similar_from_base(string, base_color)
+
+
+def color_hsl_adjust_hex(hexstr, adjust_h=None, adjust_s=None, adjust_l=None):
+    """Adjust a hex color using HSL arguments, adjustments in percentages 1.0 to -1.0. Returns a hex color."""
+    h, s, l = husl.hex_to_husl(hexstr)
+
+    if adjust_h:
+        h = h + (adjust_h * 360.0)
+
+    if adjust_s:
+        s = s + (adjust_s * 100.0)
+
+    if adjust_l:
+        l = l + (adjust_l * 100.0)
+
+    return husl.husl_to_hex(h, s, l)
 
 
 # Stolen from textwrap in Python 3.4.3.
