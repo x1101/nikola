@@ -34,7 +34,6 @@ from nikola.plugin_categories import RestExtension
 
 
 class Plugin(RestExtension):
-
     """Plugin for the youtube directive."""
 
     name = "rest_youtube"
@@ -49,12 +48,11 @@ class Plugin(RestExtension):
 CODE = """\
 <iframe width="{width}"
 height="{height}"
-src="//www.youtube.com/embed/{yid}?rel=0&amp;hd=1&amp;wmode=transparent"
+src="https://www.youtube.com/embed/{yid}?rel=0&amp;hd=1&amp;wmode=transparent"
 ></iframe>"""
 
 
 class Youtube(Directive):
-
     """reST extension for inserting youtube embedded videos.
 
     Usage:

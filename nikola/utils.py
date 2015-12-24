@@ -40,6 +40,7 @@ import os
 import re
 import json
 import shutil
+import socket
 import subprocess
 import sys
 import dateutil.parser
@@ -104,7 +105,6 @@ class ApplicationWarning(Exception):
 
 
 class ColorfulStderrHandler(ColorizedStderrHandler):
-
     """Stream handler with colors."""
 
     _colorful = False
@@ -238,7 +238,6 @@ def makedirs(path):
 
 
 class Functionary(defaultdict):
-
     """Class that looks like a function, but is a defaultdict."""
 
     def __init__(self, default, default_lang):
@@ -254,7 +253,6 @@ class Functionary(defaultdict):
 
 
 class TranslatableSetting(object):
-
     """A setting that can be translated.
 
     You can access it via: SETTING(lang).  You can omit lang, in which
@@ -433,15 +431,20 @@ class TranslatableSetting(object):
 
     def __eq__(self, other):
         """Test whether two TranslatableSettings are equal."""
-        return self.values == other.values
+        try:
+            return self.values == other.values
+        except AttributeError:
+            return self(self.default_lang) == other
 
     def __ne__(self, other):
         """Test whether two TranslatableSettings are inequal."""
-        return self.values != other.values
+        try:
+            return self.values != other.values
+        except AttributeError:
+            return self(self.default_lang) != other
 
 
 class TemplateHookRegistry(object):
-
     r"""A registry for template hooks.
 
     Usage:
@@ -507,7 +510,6 @@ class TemplateHookRegistry(object):
 
 
 class CustomEncoder(json.JSONEncoder):
-
     """Custom JSON encoder."""
 
     def default(self, obj):
@@ -523,7 +525,6 @@ class CustomEncoder(json.JSONEncoder):
 
 
 class config_changed(tools.config_changed):
-
     """A copy of doit's config_changed, using pickle instead of serializing manually."""
 
     def __init__(self, config, identifier=None):
@@ -620,7 +621,6 @@ language_incomplete_warned = []
 
 
 class LanguageNotFoundError(Exception):
-
     """An exception thrown if language is not found."""
 
     def __init__(self, lang, orig):
@@ -809,7 +809,6 @@ def encodelink(iri):
 
 
 class UnsafeZipException(Exception):
-
     """Exception for unsafe zip files."""
 
     pass
@@ -1017,7 +1016,6 @@ def get_asset_path(path, themes, files_folders={'files': ''}, _themes_dir='theme
 
 
 class LocaleBorgUninitializedException(Exception):
-
     """Exception for unitialized LocaleBorg."""
 
     def __init__(self):
@@ -1026,7 +1024,6 @@ class LocaleBorgUninitializedException(Exception):
 
 
 class LocaleBorg(object):
-
     """Provide locale related services and autoritative current_lang.
 
     current_lang is the last lang for which the locale was set
@@ -1199,6 +1196,9 @@ class LocaleBorg(object):
             # For thread-safety
             self.__set_locale(current_lang)
             fmt_date = None
+            # Get a string out of a TranslatableSetting
+            if isinstance(date_format, TranslatableSetting):
+                date_format = date_format(current_lang)
             # First check handlers
             for handler in self.formatted_date_handlers:
                 fmt_date = handler(date_format, date, current_lang)
@@ -1220,7 +1220,6 @@ class LocaleBorg(object):
 
 
 class ExtendedRSS2(rss.RSS2):
-
     """Extended RSS class."""
 
     xsl_stylesheet_href = None
@@ -1244,7 +1243,6 @@ class ExtendedRSS2(rss.RSS2):
 
 
 class ExtendedItem(rss.RSSItem):
-
     """Extended RSS item."""
 
     def __init__(self, **kw):
@@ -1296,9 +1294,9 @@ def demote_headers(doc, level=1):
         r = range(1 + level, 7)
     for i in reversed(r):
         # html headers go to 6, so we can’t “lower” beneath five
-            elements = doc.xpath('//h' + str(i))
-            for e in elements:
-                e.tag = 'h' + str(i + level)
+        elements = doc.xpath('//h' + str(i))
+        for e in elements:
+            e.tag = 'h' + str(i + level)
 
 
 def get_root_dir():
@@ -1441,7 +1439,6 @@ def ask_yesno(query, default=None):
 
 
 class CommandWrapper(object):
-
     """Converts commands into functions."""
 
     def __init__(self, cmd, commands_object):
@@ -1457,7 +1454,6 @@ class CommandWrapper(object):
 
 
 class Commands(object):
-
     """Nikola Commands.
 
     Sample usage:
@@ -1548,7 +1544,6 @@ def options2docstring(name, options):
 
 
 class NikolaPygmentsHTML(HtmlFormatter):
-
     """A Nikola-specific modification of Pygments' HtmlFormatter."""
 
     def __init__(self, anchor_ref, classes=None, linenos='table', linenostart=1):
@@ -1655,7 +1650,6 @@ def create_redirect(src, dst):
 
 
 class TreeNode(object):
-
     """A tree node."""
 
     indent_levels = None  # use for formatting comments as tree
@@ -1827,6 +1821,32 @@ def color_hsl_adjust_hex(hexstr, adjust_h=None, adjust_s=None, adjust_l=None):
         l = l + (adjust_l * 100.0)
 
     return husl.husl_to_hex(h, s, l)
+
+
+def dns_sd(port, inet6):
+    """Optimistically publish a HTTP service to the local network over DNS-SD.
+
+    Works only on Linux/FreeBSD.  Requires the `avahi` and `dbus` modules (symlinks in virtualenvs)
+    """
+    try:
+        import avahi
+        import dbus
+        inet = avahi.PROTO_INET6 if inet6 else avahi.PROTO_INET
+        name = "{0}'s Nikola Server on {1}".format(os.getlogin(), socket.gethostname())
+        bus = dbus.SystemBus()
+        bus_server = dbus.Interface(bus.get_object(avahi.DBUS_NAME,
+                                                   avahi.DBUS_PATH_SERVER),
+                                    avahi.DBUS_INTERFACE_SERVER)
+        bus_group = dbus.Interface(bus.get_object(avahi.DBUS_NAME,
+                                                  bus_server.EntryGroupNew()),
+                                   avahi.DBUS_INTERFACE_ENTRY_GROUP)
+        bus_group.AddService(avahi.IF_UNSPEC, inet, dbus.UInt32(0),
+                             name, '_http._tcp', '', '',
+                             dbus.UInt16(port), '')
+        bus_group.Commit()
+        return bus_group  # remember to bus_group.Reset() to unpublish
+    except Exception:
+        return None
 
 
 # Stolen from textwrap in Python 3.4.3.

@@ -236,7 +236,8 @@ def minify_lines(data):
 def typogrify(data):
     """Prettify text with typogrify."""
     if typo is None:
-        req_missing(['typogrify'], 'use the typogrify filter')
+        req_missing(['typogrify'], 'use the typogrify filter', optional=True)
+        return data
 
     data = _normalize_html(data)
     data = typo.amp(data)
@@ -289,6 +290,9 @@ def cssminify(data):
         url = 'http://cssminifier.com/raw'
         _data = {'input': data}
         response = requests.post(url, data=_data)
+        if response.status_code != 200:
+            LOGGER.error("can't use cssminifier.com: HTTP status {}", response.status_code)
+            return data
         return response.text
     except Exception as exc:
         LOGGER.error("can't use cssminifier.com: {}", exc)
@@ -302,6 +306,9 @@ def jsminify(data):
         url = 'http://javascript-minifier.com/raw'
         _data = {'input': data}
         response = requests.post(url, data=_data)
+        if response.status_code != 200:
+            LOGGER.error("can't use javascript-minifier.com: HTTP status {}", response.status_code)
+            return data
         return response.text
     except Exception as exc:
         LOGGER.error("can't use javascript-minifier.com: {}", exc)
@@ -313,6 +320,14 @@ def jsonminify(data):
     """Minify JSON files (strip whitespace and use minimal separators)."""
     data = json.dumps(json.loads(data), indent=None, separators=(',', ':'))
     return data
+
+
+@apply_to_binary_file
+def xmlminify(data):
+    """Minify XML files (strip whitespace and use minimal separators)."""
+    parser = lxml.etree.XMLParser(remove_blank_text=True)
+    newdata = lxml.etree.XML(data, parser=parser)
+    return lxml.etree.tostring(newdata, encoding='utf-8', method='xml', xml_declaration=True)
 
 
 def _normalize_html(data):

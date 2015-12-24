@@ -4,13 +4,71 @@ New in master
 Features
 --------
 
-* New ```jsonmnify``` filter for minifying JSON files.
+* Hugo-like shortcodes (Issue #1707)
+
+New in v7.7.4
+=============
+
+Features
+--------
+
+* Added cache for Jinja templates (Issue #2166)
+* Use Jupyter instead of IPython shims (Issue #1938)
+* Automatically open gallery images colorbox based on URL fragment (Issue #2146)
+
+Bugfixes
+--------
+
+* Fix enclosures from metadata (Issue #2189)
+* Restored log level to INFO (it broke many messages)
+* Check HTTP response status of minifying tools and skip them if they’re unavailable
+* Change rewrite rule for fragment-only links (Issue #2132)
+* Mention disabled plugins in ``nikola plugin --list-installed`` (Issue #2139)
+* Don't examine all gallery image dates every build (Issue #2160)
+
+New in v7.7.3
+=============
+
+Features
+--------
+
+* Recommend ``ghp-import2`` (better packaging) (Issue #2152)
+* New ``TAGS_INDEX_PATH`` option for overwriting the path
+  of the tag index list page.
+* Support for ``~~strikethrough~~`` in Markdown (Issue #2149)
+* Hungarian translation (by Baptiste Darthenay)
+* ``serve`` and ``auto`` publishes DNS Service Discovery records
+  to the local network announcing they’re running web servers.
+
+
+Bugfixes
+--------
+
+* Implement translating ``DATE_FORMAT`` properly
+* Remove superfluous translatability for a boolean (Issue #2140)
+* Pass messages to post-list template (Issue #2156)
+* Changed default log level from INFO to NOTICE (``nikola check`` is less chatty)
+* Fix support for panorama images in gallery(Issue #2143)
+* Support "maps.world.World" and similar charts in Pygal (Issue #2142)
+* Capitalize "UTF-8" properly in locale guessing (Issue #2137)
+
+New in v7.7.2
+=============
+
+Features
+--------
+
+* Warning about Python 2.7 deprecation (Issues #2121, #2122)
+* New ``jsonminify`` filter for minifying JSON files.
+* New ``xmlminify`` filter for minifying XML files.
 * New option ``FEED_PREVIEWIMAGE`` includes the ``post.meta.previewimage``
   image in Atom and RSS feeds. (Issue #2095)
 
 Bugfixes
 --------
 
+* Support Pillow v3.0.0 (Issue #2130)
+* Support setting template in metadata in translated posts (Issue #2114)
 * Fix false orphan report for code.css and robots.txt (Issue #2106)
 * Fix reST post list date formatting error (Issue #2104)
 * Deprecated ``RSS_TEASERS``, ``RSS_PLAIN``, ``RSS_READ_MORE_LINK``, and
@@ -24,7 +82,8 @@ Deprecations
 ------------
 
 * Post.section_link is now deprecated (Issue #2086). Use
-  site.link('index_section_path', post.section_slug()) instead.
+  site.link('section_index', post.section_slug()) instead. (not
+  'section_index_link', as previously stated in this document)
 
 New in v7.7.1
 =============
@@ -660,7 +719,7 @@ Features
 * Link listings raw sources if COPY_SOURCES is True (Issue #1214)
 * Much more powerful ``nikola plugin`` command (Issue #1189)
 * More powerful console mode allows access to all nikola commands (Issue #830)
-* New ```ROBOTS_EXCLUSIONS``` option listing resources to exclude from sitemap
+* New ``ROBOTS_EXCLUSIONS`` option listing resources to exclude from sitemap
   and include in new generated /robots.txt (Issue #804)
 * Generate sitemapindex containing RSS and sitemap files (Issue #804)
 * Support hooks in templates, for use by plugins (Issue #896)

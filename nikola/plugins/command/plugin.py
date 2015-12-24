@@ -45,7 +45,6 @@ LOGGER = utils.get_logger('plugin', utils.STDERR_HANDLER)
 
 
 class CommandPlugin(Command):
-
     """Manage plugins."""
 
     json = None
@@ -177,8 +176,11 @@ class CommandPlugin(Command):
             plugins.append([plugin.name, p])
 
         plugins.sort()
+        print('Installed Plugins')
+        print('-----------------')
         for name, path in plugins:
             print('{0} at {1}'.format(name, path))
+        print('\n\nAlso, you have disabled these plugins: {}'.format(self.site.config['DISABLED_PLUGINS']))
         return 0
 
     def do_upgrade(self, url):

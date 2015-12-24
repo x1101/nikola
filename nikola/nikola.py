@@ -57,7 +57,7 @@ from yapsy.PluginManager import PluginManager
 from blinker import signal
 
 from .post import Post  # NOQA
-from . import DEBUG, utils
+from . import DEBUG, utils, shortcodes
 from .plugin_categories import (
     Command,
     LateTask,
@@ -121,6 +121,7 @@ LEGAL_VALUES = {
         'fr': 'French',
         'hi': 'Hindi',
         'hr': 'Croatian',
+        'hu': 'Hungarian',
         'id': 'Indonesian',
         'it': 'Italian',
         ('ja', '!jp'): 'Japanese',
@@ -130,7 +131,7 @@ LEGAL_VALUES = {
         'pa': 'Punjabi',
         'pl': 'Polish',
         'pt': 'Portuguese',
-        'pt_br': 'Portuguese (Brasil)',
+        'pt_br': 'Portuguese (Brazil)',
         'ru': 'Russian',
         'sk': 'Slovak',
         'sl': 'Slovene',
@@ -155,6 +156,7 @@ LEGAL_VALUES = {
         "fa": "Farsi",  # Persian
         "fr": "French",
         "hr": "Croatian",
+        "hu": "Hungarian",
         "it": "Italian",
         "jp": "Japanese",
         "nl": "Dutch",
@@ -189,6 +191,7 @@ LEGAL_VALUES = {
         fi='fi',
         fr='fr',
         hr='hr',
+        hu='hu',
         id='id',
         it='it',
         ja='ja',
@@ -221,7 +224,7 @@ LEGAL_VALUES = {
         da='da',
         de='de',
         el='el',
-        en='',
+        en='en',
         eo='eo',
         es='es',
         et='et',
@@ -231,6 +234,7 @@ LEGAL_VALUES = {
         fr='fr',
         hi='hi',
         hr='hr',
+        hu='hu',
         id='id',
         it='it',
         ja='ja',
@@ -263,6 +267,7 @@ LEGAL_VALUES = {
         'et': 'et',
         'fr': 'fr',
         'hr': 'hr',
+        'hu': 'hu',
         'it': 'it',
         'nb': 'nb',
         'nl': 'nl',
@@ -290,7 +295,6 @@ def _enclosure(post, lang):
 
 
 class Nikola(object):
-
     """Class that handles site generation.
 
     Takes a site config as argument on creation.
@@ -330,6 +334,7 @@ class Nikola(object):
         self.configuration_filename = config.pop('__configuration_filename__', False)
         self.configured = bool(config)
         self.injected_deps = defaultdict(list)
+        self.shortcode_registry = {}
 
         self.rst_transforms = []
         self.template_hooks = {
@@ -482,6 +487,7 @@ class Nikola(object):
             'TAG_PAGES_ARE_INDEXES': False,
             'TAG_PAGES_DESCRIPTIONS': {},
             'TAG_PAGES_TITLES': {},
+            'TAGS_INDEX_PATH': '',
             'TAGLIST_MINIMUM_POSTS': 1,
             'TEMPLATE_FILTERS': {},
             'THEME': 'bootstrap3',
@@ -558,6 +564,7 @@ class Nikola(object):
                                       'INDEXES_PRETTY_PAGE_URL',
                                       # PATH options (Issue #1914)
                                       'TAG_PATH',
+                                      'TAGS_INDEX_PATH',
                                       'CATEGORY_PATH',
                                       'DATE_FORMAT',
                                       'JS_DATE_FORMAT',
@@ -635,7 +642,7 @@ class Nikola(object):
             utils.LOGGER.warn('The RSS_LINKS_APPEND_QUERY option is deprecated, use FEED_LINKS_APPEND_QUERY instead.')
             if 'FEED_TEASERS' in config:
                 utils.LOGGER.warn('FEED_LINKS_APPEND_QUERY conflicts with RSS_LINKS_APPEND_QUERY, ignoring RSS_LINKS_APPEND_QUERY.')
-            self.config['FEED_LINKS_APPEND_QUERY'] = utils.TranslatableSetting('FEED_LINKS_APPEND_QUERY', config['RSS_LINKS_APPEND_QUERY'], self.config['TRANSLATIONS'])
+            self.config['FEED_LINKS_APPEND_QUERY'] = config['RSS_LINKS_APPEND_QUERY']
 
         # RSS_READ_MORE_LINK has been replaced with FEED_READ_MORE_LINK
         # TODO: remove on v8
@@ -903,7 +910,7 @@ class Nikola(object):
                 plugin_info.plugin_object
 
         self._activate_plugins_of_category("ConfigPlugin")
-
+        self._register_templated_shortcodes()
         signal('configured').send(self)
 
     def _set_global_context(self):
@@ -1275,7 +1282,7 @@ class Nikola(object):
         # Now i is the longest common prefix
         result = '/'.join(['..'] * (len(src_elems) - i - 1) + dst_elems[i:])
 
-        if not result:
+        if not result and not parsed_dst.fragment:
             result = "."
 
         # Don't forget the query part of the link
@@ -1289,6 +1296,32 @@ class Nikola(object):
         assert result, (src, dst, i, src_elems, dst_elems)
 
         return result
+
+    def _register_templated_shortcodes(self):
+        """Register shortcodes provided by templates in shortcodes/ folder."""
+        if not os.path.isdir('shortcodes'):
+            return
+        for fname in os.listdir('shortcodes'):
+            name, ext = os.path.splitext(fname)
+            if ext == '.tmpl':
+                with open(os.path.join('shortcodes', fname)) as fd:
+                    template_data = fd.read()
+
+                def render_shortcode(t_data=template_data, **kw):
+                    return self.template_system.render_template_to_string(t_data, kw)
+
+                self.register_shortcode(name, render_shortcode)
+
+    def register_shortcode(self, name, f):
+        """Register function f to handle shortcode "name"."""
+        if name in self.shortcode_registry:
+            utils.LOGGER.warn('Shortcode name conflict: %s', name)
+            return
+        self.shortcode_registry[name] = f
+
+    def apply_shortcodes(self, data):
+        """Apply shortcodes from the registry on data."""
+        return shortcodes.apply_shortcodes(data, self.shortcode_registry)
 
     def generic_rss_renderer(self, lang, title, link, description, timeline, output_path,
                              rss_teasers, rss_plain, feed_length=10, feed_url=None,
@@ -1738,6 +1771,7 @@ class Nikola(object):
 
     def generic_page_renderer(self, lang, post, filters, context=None):
         """Render post fragments to final HTML pages."""
+        utils.LocaleBorg().set_locale(lang)
         context = context.copy() if context else {}
         deps = post.deps(lang) + \
             self.template_system.template_deps(post.template_name)
@@ -2257,7 +2291,7 @@ def valid_locale_fallback(desired_locale=None):
     """
     # Whenever fallbacks change, adjust test TestHarcodedFallbacksWork
     candidates_windows = [str('English'), str('C')]
-    candidates_posix = [str('en_US.utf8'), str('C')]
+    candidates_posix = [str('en_US.UTF-8'), str('C')]
     candidates = candidates_windows if sys.platform == 'win32' else candidates_posix
     if desired_locale:
         candidates = list(candidates)
@@ -2291,7 +2325,7 @@ def guess_locale_from_lang_posix(lang):
         locale_n = str(lang)
     else:
         # this works in Travis when locale support set by Travis suggestion
-        locale_n = str((locale.normalize(lang).split('.')[0]) + '.utf8')
+        locale_n = str((locale.normalize(lang).split('.')[0]) + '.UTF-8')
     if not is_valid_locale(locale_n):
         # http://thread.gmane.org/gmane.comp.web.nikola/337/focus=343
         locale_n = str((locale.normalize(lang).split('.')[0]))

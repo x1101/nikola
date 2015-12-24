@@ -38,10 +38,10 @@ except ImportError:
 
 from nikola.plugin_categories import Task
 from nikola import utils
+from nikola.nikola import _enclosure
 
 
 class RenderTags(Task):
-
     """Render the tag/category pages and feeds."""
 
     name = "render_tags"
@@ -172,7 +172,7 @@ class RenderTags(Task):
             """Write tag data into JSON file, for use in tag clouds."""
             utils.makedirs(os.path.dirname(output_name))
             with open(output_name, 'w+') as fd:
-                json.dump(data, fd)
+                json.dump(data, fd, sort_keys=True)
 
         if self.site.config['WRITE_TAG_CLOUD']:
             task = {
@@ -380,7 +380,7 @@ class RenderTags(Task):
                         (lang, "{0} ({1})".format(kw["blog_title"](lang), self._get_title(tag, is_category)),
                          kw["site_url"], None, post_list,
                          output_name, kw["feed_teasers"], kw["feed_plain"], kw['feed_length'],
-                         feed_url, None, kw["feed_link_append_query"]))],
+                         feed_url, _enclosure, kw["feed_link_append_query"]))],
             'clean': True,
             'uptodate': [utils.config_changed(kw, 'nikola.plugins.task.tags:rss')] + deps_uptodate,
             'task_dep': ['render_posts'],
@@ -400,9 +400,14 @@ class RenderTags(Task):
 
         link://tag_index => /tags/index.html
         """
-        return [_f for _f in [self.site.config['TRANSLATIONS'][lang],
-                              self.site.config['TAG_PATH'][lang],
-                              self.site.config['INDEX_FILE']] if _f]
+        if self.site.config['TAGS_INDEX_PATH'][lang]:
+            paths = [_f for _f in [self.site.config['TRANSLATIONS'][lang],
+                                   self.site.config['TAGS_INDEX_PATH'][lang]] if _f]
+        else:
+            paths = [_f for _f in [self.site.config['TRANSLATIONS'][lang],
+                                   self.site.config['TAG_PATH'][lang],
+                                   self.site.config['INDEX_FILE']] if _f]
+        return paths
 
     def category_index_path(self, name, lang):
         """A link to the category index.

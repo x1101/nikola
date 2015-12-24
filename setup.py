@@ -75,8 +75,8 @@ def expands_symlinks_for_windows():
     path to the file it points to. If not corrected, installing from a git
     clone will end with some files with bad content
 
-    After install the working copy will be dirty (symlink markers overwritten with
-    real content)
+    After install the working copy will be dirty (symlink markers overwritten
+    with real content)
     """
     if sys.platform != 'win32':
         return
@@ -90,7 +90,8 @@ def expands_symlinks_for_windows():
     sys.path = oldpath
     del sys.modules['winutils']
     if failures != -1:
-        print('WARNING: your working copy is now dirty by changes in samplesite, sphinx and themes')
+        print('WARNING: your working copy is now dirty by changes in '
+              'samplesite, sphinx and themes')
     if failures > 0:
         raise Exception("Error: \n\tnot all symlinked files could be fixed." +
                         "\n\tYour best bet is to start again from clean.")
@@ -112,15 +113,15 @@ class nikola_install(install):
 
 
 setup(name='Nikola',
-      version='7.7.1',
-      description='A modular, fast, simple, static website generator',
+      version='7.7.4',
+      description='A modular, fast, simple, static website and blog generator',
       long_description=open('README.rst').read(),
       author='Roberto Alsina and others',
       author_email='ralsina@netmanagers.com.ar',
       url='https://getnikola.com/',
       packages=find_packages(exclude=('tests',)),
       license='MIT',
-      keywords='website, static',
+      keywords='website, blog, static',
       classifiers=('Development Status :: 5 - Production/Stable',
                    'Environment :: Console',
                    'Environment :: Plugins',
@@ -152,7 +153,7 @@ setup(name='Nikola',
                'docs/extending.txt']),
               ('share/man/man1', ['docs/man/nikola.1.gz']),
       ],
-      entry_points = {
+      entry_points={
           'console_scripts': [
               'nikola = nikola.__main__:main'
           ]

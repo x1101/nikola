@@ -24,6 +24,7 @@ def task_flake8():
         'actions': ['flake8 nikola/'],
     }
 
+
 def task_pep257():
     """pep257 -- static check for docstring style"""
     yield {
@@ -41,7 +42,7 @@ def task_locale():
             locales = []
             languages = set()
             for line in out.splitlines():
-                if line.endswith('.utf8') and '_' in line:
+                if (line.endswith('.utf8') or line.endswith('.UTF-8')) and '_' in line:
                     lang = line.split('_')[0]
                     if lang not in languages:
                         try:

@@ -9,7 +9,7 @@
 The Nikola Handbook
 ===================
 
-:Version: 7.7.1
+:Version: 7.7.4
 
 .. class:: alert alert-info pull-right
 
@@ -122,7 +122,7 @@ Security
 
     A smaller software stack implies less security risk.
 
-Obsolescense
+Obsolescence
     If you create a site using (for example) WordPress, what happens when WordPress
     releases a new version? You have to update your WordPress. That is not optional,
     because of security and support issues. If I release a new version of Nikola, and
@@ -529,7 +529,7 @@ You can override the default value for ``TEASER_END`` in ``conf.py`` — for
 example, the following example will work for ``.. more``, and will be
 compatible with both WordPress and Nikola posts:
 
-..code:: python
+.. code:: python
 
     import re
     TEASER_REGEXP = re.compile('<!--\s*(more|TEASER_END)(:(.+))?\s*-->', re.IGNORECASE)
@@ -545,7 +545,6 @@ Or you can completely customize the link using the ``READ_MORE_LINK`` option.
     # {{            A literal { (U+007B LEFT CURLY BRACKET)
     # }}            A literal } (U+007D RIGHT CURLY BRACKET)
     # READ_MORE_LINK = '<p class="more"><a href="{link}">{read_more}…</a></p>'
-
 
 Drafts
 ~~~~~~
@@ -758,6 +757,9 @@ config option:
 
     MARKDOWN_EXTENSIONS = ['fenced_code', 'codehilite', 'extra']
 
+Nikola comes with some Markdown Extensions built-in and enabled by default,
+namely a gist directive, a podcast directive, and ``~~strikethrough~~`` support.
+
 IPython Notebook/Jupyter
 ````````````````````````
 
@@ -796,6 +798,59 @@ original compilers.  The input format is inferred from the extension by Pandoc.
 Using Pandoc for reStructuredText, Markdown and other input formats that have a
 standalone Nikola plugin is **not recommended** as it disables plugins and
 extensions that are usually provided by Nikola.
+
+Shortcodes
+----------
+
+This feature is "inspired" (copied wholesale) from `Hugo <https://gohugo.io/extras/shortcodes/>`__ so I will
+steal part of their docs too.
+
+A shortcode is a simple snippet inside a content file that Nikola will render using a predefined template or
+custom code from a plugin.
+
+To use them from plugins, please see `Extending Nikola <https://getnikola.com/extending.html#shortcodes>`__
+
+Using a shortcode
+~~~~~~~~~~~~~~~~~
+
+In your content files, a shortcode can be called by using the ``{{% name parameters %}}`` form. Shortcode parameters are space delimited. Parameters with spaces can be quoted (or backslash escaped).
+
+The first word is always the name of the shortcode. Parameters follow the name. Depending upon how the shortcode is defined, the parameters may be named, positional or both (although you can’t mix parameter types in a single call). The format for named parameters models that of HTML with the format name="value".
+
+Some shortcodes use or require closing shortcodes. Like HTML, the opening and closing shortcodes match (name only), the closing being prepended with a slash.
+
+Example of a paired shortcode (note that we don't have a highlight shortcode yet ;-)::
+
+    {{% highlight go %}} A bunch of code here {{% /highlight %}}
+    
+Build-in shortcodes
+~~~~~~~~~~~~~~~~~~~
+
+post-list
+    Will show a list of posts, see the `Post List directive for details <#post-list>`__
+    
+
+Template-based shortcodes
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you put a template in ``shortcodes/`` called ``mycode.tmpl`` then Nikola will create a shortcode
+called ``mycode`` you can use. Any options you pass to the shortcode will be available as variables 
+for that template. If you use the shortcode as paired, then the contents between the paired tags will
+be available in the ``data`` variable.
+
+If you want to access the Nikola object, it will be available as ``site``. Use with care :-)
+
+For example, if your ``shortcodes/foo.tmpl`` contains this::
+
+    This uses the bar variable: ${bar}
+
+And your post contains this::
+
+    {{% foo bar=bla %}}
+
+Then the output file will contain::
+
+    This uses the bar variable: bla
 
 Redirections
 ------------
@@ -915,7 +970,7 @@ Navigation Links
 
        3. If you link to directories, make sure to follow ``STRIP_INDEXES``.  If
           it’s set to ``True``, end your links with a ``/``, otherwise end them
-          with ``/index.html`` — or else they won’t be hilighted when active.
+          with ``/index.html`` — or else they won’t be highlighted when active.
 
     The ``SEARCH_FORM`` option contains the HTML code for a search form based on
     duckduckgo.com which should always work, but feel free to change it to
@@ -1099,25 +1154,62 @@ Deploying to GitHub
 ~~~~~~~~~~~~~~~~~~~
 
 Nikola provides a separate command ``github_deploy`` to deploy your site to
-GitHub pages.  The command builds the site, commits the output to a gh-pages
+GitHub Pages.  The command builds the site, commits the output to a gh-pages
 branch and pushes the output to GitHub.  Nikola uses the `ghp-import command
 <https://github.com/davisp/ghp-import>`_ for this.
 
-The branch to use for committing the sources can be changed using the
-``GITHUB_DEPLOY_BRANCH`` option in your config.  For a
-user.github.io/organization.github.io, this MUST be set to ``master``,
-and the branch containing the sources must be changed to something
-else, like ``deploy``, using the ``GITHUB_SOURCE_BRANCH`` option.  The
-remote name to which the changes are pushed is ``origin`` by default,
-and can be changed using the ``GITHUB_REMOTE_NAME`` option.  You also,
-obviously, need to have ``git`` on your PATH, and should be able to
-push to the repository specified as the remote.
+In order to use this feature, you need to configure a few things first.  Make
+sure you have ``nikola`` and ``git`` installed on your PATH.
 
-This command performs the following actions, when it is run:
+1. Initialize a Nikola site, if you haven’t already.
+2. Initialize a git repository in your Nikola source directory by running:
 
-1. Builds the site
-2. Commit the output folder to the ``GITHUB_DEPLOY_BRANCH`` to this branch.
-3. Push the branch to the remote specified in ``GITHUB_REMOTE_NAME``!
+   .. code:: text
+
+      git init .
+      git remote add origin git@github.com:user/repository.git
+
+3. Setup branches and remotes in ``conf.py``:
+
+   * ``GITHUB_DEPLOY_BRANCH`` is the branch where Nikola-generated HTML files
+     will be deployed. It should be ``gh-pages`` for project pages and
+     ``master`` for user pages (user.github.io).
+   * ``GITHUB_SOURCE_BRANCH`` is the branch where your Nikola site source will be
+     deployed. We default to ``master``, but user pages should use ``src`` or
+     something else.
+   * ``GITHUB_REMOTE_NAME`` is the remote to which changes are pushed.
+
+4. Create a ``.gitignore`` file. We recommend adding at least the following entries:
+
+   .. code:: text
+
+      cache
+      .doit.db
+      __pycache__
+      output
+
+5. Switch to your source branch (if necessary) and commit to your source branch:
+
+   .. code:: text
+
+      git checkout -b src
+      git add .
+      git commit -am "Initial commit"
+
+6. Run ``nikola github_deploy``.  This will build the site, commit the output
+   folder to your deploy branch, and push to GitHub.  Your website should be up
+   and running within a few minutes.
+7. You should push your source branch to GitHub, too — this way, you have a
+   backup in case of catastrophic disk failure, and you can work on your
+   website from around the world.
+
+   .. code:: text
+
+      git push -u origin src
+
+If you want to use a custom domain, create your ``CNAME`` file in
+``files/CNAME`` on the source branch. Nikola will copy it to the
+output directory.
 
 Comments and Annotations
 ------------------------
@@ -1383,6 +1475,9 @@ jsminify
 
 jsonminify
    Minify JSON files (strip whitespace and use minimal separators).
+
+xmlminify
+   Minify XML files. Suitable for Nikola’s sitemaps and Atom feeds.
 
 You can apply filters to specific posts or pages by using the ``filters`` metadata field:
 

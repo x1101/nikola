@@ -63,7 +63,7 @@ except ImportError:
 
 
 from nikola.plugin_categories import Command
-from nikola.utils import req_missing, get_logger, get_theme_path, STDERR_HANDLER
+from nikola.utils import dns_sd, req_missing, get_logger, get_theme_path, STDERR_HANDLER
 LRJS_PATH = os.path.join(os.path.dirname(__file__), 'livereload.js')
 error_signal = signal('error')
 refresh_signal = signal('refresh')
@@ -79,13 +79,14 @@ ERROR {}
 
 
 class CommandAuto(Command):
-
     """Automatic rebuilds for Nikola."""
 
     name = "auto"
     logger = None
     has_server = True
     doc_purpose = "builds and serves a site; automatically detects site changes, rebuilds, and optionally refreshes a browser"
+    dns_sd = None
+
     cmd_options = [
         {
             'name': 'port',
@@ -142,7 +143,7 @@ class CommandAuto(Command):
 
         self.cmd_arguments = ['nikola', 'build']
         if self.site.configuration_filename != 'conf.py':
-            self.cmd_arguments = ['--conf=' + self.site.configuration_filename] + self.cmd_arguments
+            self.cmd_arguments.append('--conf=' + self.site.configuration_filename)
 
         # Run an initial build so we are up-to-date
         subprocess.call(self.cmd_arguments)
@@ -208,7 +209,6 @@ class CommandAuto(Command):
         parent = self
 
         class Mixed(WebSocketWSGIApplication):
-
             """A class that supports WS and HTTP protocols on the same port."""
 
             def __call__(self, environ, start_response):
@@ -235,9 +235,12 @@ class CommandAuto(Command):
                 webbrowser.open('http://{0}:{1}'.format(host, port))
 
             try:
+                self.dns_sd = dns_sd(port, (options['ipv6'] or '::' in host))
                 ws.serve_forever()
             except KeyboardInterrupt:
                 self.logger.info("Server is shutting down.")
+                if self.dns_sd:
+                    self.dns_sd.Reset()
                 # This is a hack, but something is locking up in a futex
                 # and exit() doesn't work.
                 os.kill(os.getpid(), 15)
@@ -342,7 +345,6 @@ pending = []
 
 
 class LRSocket(WebSocket):
-
     """Speak Livereload protocol."""
 
     def __init__(self, *a, **kw):
@@ -415,7 +417,6 @@ class LRSocket(WebSocket):
 
 
 class OurWatchHandler(FileSystemEventHandler):
-
     """A Nikola-specific handler for Watchdog."""
 
     def __init__(self, function):
@@ -429,7 +430,6 @@ class OurWatchHandler(FileSystemEventHandler):
 
 
 class ConfigWatchHandler(FileSystemEventHandler):
-
     """A Nikola-specific handler for Watchdog that handles the config file (as a workaround)."""
 
     def __init__(self, configuration_filename, function):

@@ -76,7 +76,6 @@ _UPGRADE_METADATA_ADVERTISED = False
 
 
 class Post(object):
-
     """Represent a blog post or site page."""
 
     def __init__(
@@ -323,7 +322,8 @@ class Post(object):
     @property
     def template_name(self):
         """Return template name for this post."""
-        return self.meta('template') or self._template_name
+        lang = nikola.utils.LocaleBorg().current_lang
+        return self.meta[lang]['template'] or self._template_name
 
     def formatted_date(self, date_format, date=None):
         """Return the formatted date as unicode."""
@@ -483,6 +483,7 @@ class Post(object):
             self.translated_source_path(lang),
             dest,
             self.is_two_file),
+
         if self.meta('password'):
             # TODO: get rid of this feature one day (v8?; warning added in v7.3.0.)
             LOGGER.warn("The post {0} is using the `password` attribute, which may stop working in the future.")
@@ -746,7 +747,7 @@ class Post(object):
     def section_link(self, lang=None):
         """Return the link to the post's section (deprecated)."""
         utils.LOGGER.warning("Post.section_link is deprecated. Please use " +
-                             "site.link('index_section_path', post.section_slug()) instead.")
+                             "site.link('section_index', post.section_slug()) instead.")
         if lang is None:
             lang = nikola.utils.LocaleBorg().current_lang
 

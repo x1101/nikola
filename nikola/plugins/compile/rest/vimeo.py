@@ -37,7 +37,6 @@ from nikola.plugin_categories import RestExtension
 
 
 class Plugin(RestExtension):
-
     """Plugin for vimeo reST directive."""
 
     name = "rest_vimeo"
@@ -49,7 +48,7 @@ class Plugin(RestExtension):
         return super(Plugin, self).set_site(site)
 
 
-CODE = """<iframe src="//player.vimeo.com/video/{vimeo_id}"
+CODE = """<iframe src="https://player.vimeo.com/video/{vimeo_id}"
 width="{width}" height="{height}"
 frameborder="0" webkitAllowFullScreen="webkitAllowFullScreen" mozallowfullscreen="mozallowfullscreen" allowFullScreen="allowFullScreen">
 </iframe>
@@ -60,7 +59,6 @@ VIDEO_DEFAULT_WIDTH = 281
 
 
 class Vimeo(Directive):
-
     """reST extension for inserting vimeo embedded videos.
 
     Usage:
@@ -109,7 +107,7 @@ class Vimeo(Directive):
 
             if json:  # we can attempt to retrieve video attributes from vimeo
                 try:
-                    url = ('//vimeo.com/api/v2/video/{0}'
+                    url = ('https://vimeo.com/api/v2/video/{0}'
                            '.json'.format(self.arguments[0]))
                     data = requests.get(url).text
                     video_attributes = json.loads(data)[0]
