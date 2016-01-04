@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2015 Roberto Alsina and others.
+# Copyright © 2012-2016 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -76,7 +76,7 @@ class CompileMarkdown(PageCompiler):
             if not is_two_file:
                 _, data = self.split_metadata(data)
             output = markdown(data, self.extensions)
-            output = apply_shortcodes(output, self.site.shortcode_registry, self.site)
+            output = apply_shortcodes(output, self.site.shortcode_registry, self.site, source)
             out_file.write(output)
 
     def create_post(self, path, **kw):

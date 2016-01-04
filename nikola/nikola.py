@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2015 Roberto Alsina and others.
+# Copyright © 2012-2016 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -119,6 +119,7 @@ LEGAL_VALUES = {
         'fa': 'Persian',
         'fi': 'Finnish',
         'fr': 'French',
+        'gl': 'Galician',
         'hi': 'Hindi',
         'hr': 'Croatian',
         'hu': 'Hungarian',
@@ -232,6 +233,7 @@ LEGAL_VALUES = {
         fa='fa',
         fi='fi',
         fr='fr',
+        gl='gl',
         hi='hi',
         hr='hr',
         hu='hu',
@@ -516,6 +518,7 @@ class Nikola(object):
             'GITHUB_SOURCE_BRANCH': 'master',
             'GITHUB_DEPLOY_BRANCH': 'gh-pages',
             'GITHUB_REMOTE_NAME': 'origin',
+            'GITHUB_COMMIT_SOURCE': False,  # WARNING: conf.py.in overrides this with True for backwards compatibility
         }
 
         # set global_context for template rendering
@@ -1298,19 +1301,23 @@ class Nikola(object):
         return result
 
     def _register_templated_shortcodes(self):
-        """Register shortcodes provided by templates in shortcodes/ folder."""
-        if not os.path.isdir('shortcodes'):
-            return
-        for fname in os.listdir('shortcodes'):
-            name, ext = os.path.splitext(fname)
-            if ext == '.tmpl':
-                with open(os.path.join('shortcodes', fname)) as fd:
-                    template_data = fd.read()
+        """Register shortcodes provided by templates in shortcodes/ folders."""
+        builtin_sc_dir = resource_filename('nikola', os.path.join('data', 'shortcodes', utils.get_template_engine(self.THEMES)))
+        sc_dirs = [builtin_sc_dir, 'shortcodes']
 
-                def render_shortcode(t_data=template_data, **kw):
-                    return self.template_system.render_template_to_string(t_data, kw)
+        for sc_dir in sc_dirs:
+            if not os.path.isdir(sc_dir):
+                continue
+            for fname in os.listdir(sc_dir):
+                name, ext = os.path.splitext(fname)
+                if ext == '.tmpl':
+                    with open(os.path.join(sc_dir, fname)) as fd:
+                        template_data = fd.read()
 
-                self.register_shortcode(name, render_shortcode)
+                    def render_shortcode(t_data=template_data, **kw):
+                        return self.template_system.render_template_to_string(t_data, kw)
+
+                    self.register_shortcode(name, render_shortcode)
 
     def register_shortcode(self, name, f):
         """Register function f to handle shortcode "name"."""
@@ -1319,9 +1326,9 @@ class Nikola(object):
             return
         self.shortcode_registry[name] = f
 
-    def apply_shortcodes(self, data):
+    def apply_shortcodes(self, data, filename=None):
         """Apply shortcodes from the registry on data."""
-        return shortcodes.apply_shortcodes(data, self.shortcode_registry)
+        return shortcodes.apply_shortcodes(data, self.shortcode_registry, self, filename)
 
     def generic_rss_renderer(self, lang, title, link, description, timeline, output_path,
                              rss_teasers, rss_plain, feed_length=10, feed_url=None,
@@ -1754,7 +1761,9 @@ class Nikola(object):
         # Sort everything.
 
         for thing in self.timeline, self.posts, self.all_posts, self.pages:
-            thing.sort(key=lambda p: (p.date, p.source_path))
+            thing.sort(key=lambda p:
+                       (int(p.meta('priority')) if p.meta('priority') else 0,
+                        p.date, p.source_path))
             thing.reverse()
         self._sort_category_hierarchy()
 
