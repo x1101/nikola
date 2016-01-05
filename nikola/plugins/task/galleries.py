@@ -88,7 +88,6 @@ class Galleries(Task, ImageProcessor):
             'generate_rss': site.config['GENERATE_RSS'],
             'gallery_index_title': site.config['GALLERY_INDEX_TITLE'],
             'galleries_use_thumbnail': site.config['GALLERIES_USE_THUMBNAIL'],
-            'galleries_columns': site.config['GALLERIES_COLUMNS'],
             'galleries_default_thumbnail': site.config['GALLERIES_DEFAULT_THUMBNAIL'],
         }
 
@@ -231,7 +230,7 @@ class Galleries(Task, ImageProcessor):
                     context["title"] = post.title(lang)
                 else:
                     # TODO: make this translatable
-                    context["title"] = self.kw['gallery_index_title']
+                    context["title"] = self.kw['gallery_index_title'](lang)
 
                 context["description"] = None
 
@@ -274,7 +273,6 @@ class Galleries(Task, ImageProcessor):
                 context["thumbnail_size"] = self.kw["thumbnail_size"]
 
                 context["galleries_use_thumbnail"] = self.kw["galleries_use_thumbnail"]
-                context["galleries_columns"] = self.kw["galleries_columns"]
                 context["galleries_default_thumbnail"] = self.kw["galleries_default_thumbnail"]
                 context["thumbnail_size"] = self.kw["thumbnail_size"]
 
