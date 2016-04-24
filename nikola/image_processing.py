@@ -45,6 +45,10 @@ except ImportError:
         Image = _Image
     except ImportError:
         pass
+try:
+    import piexif
+except ImportError:
+    piexif = None
 
 
 class ImageProcessor(object):

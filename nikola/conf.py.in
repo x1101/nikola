@@ -573,6 +573,10 @@ GITHUB_COMMIT_SOURCE = True
 # resized.
 # PRESERVE_EXIF_DATA = False
 
+# List of EXIF field names to scrub from images. Only useful when PRESERVE_EXIF_DATA
+# is True.
+# EXIF_SCRUB_FIELDS = []
+
 #
 # Folders containing images to be used in normal posts or pages. Images will be
 # scaled down according to IMAGE_THUMBNAIL_SIZE and MAX_IMAGE_SIZE options, but
