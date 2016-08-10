@@ -1,6 +1,6 @@
 [Core]
 name = generate_ogg_rss
-module = rss
+module = rss_ogg
 
 [Documentation]
 author = Lyle McKarns
