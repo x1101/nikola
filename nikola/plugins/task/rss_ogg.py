@@ -28,6 +28,7 @@
 
 from __future__ import unicode_literals, print_function
 import os
+import mimetypes
 try:
     from urlparse import urljoin
 except ImportError:
@@ -129,4 +130,4 @@ class GenerateRSS(Task):
         link://rss => /blog/rss.xml
         """
         return [_f for _f in [self.site.config['TRANSLATIONS'][lang],
-                              self.site.config['RSS_OGG_PATH'], 'rss_ogg.xml'] if _f]
+                              self.site.config.get('RSS_OGG_PATH', ''), 'rss_ogg.xml'] if _f]
