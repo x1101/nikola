@@ -40,10 +40,10 @@ from nikola.plugin_categories import Task
 class GenerateRSS(Task):
     """Generate (ogg) RSS feeds."""
 
-    name = "generate_rss"
+    name = "generate_rss_ogg"
 
     ## Shamelessly stolen from nikola.py because it works, but needs different meta fields to trigger it
-    def _enclosure(post, lang):
+    def _enclosure(self, post, lang):
         """Add an enclosure to RSS."""
         enclosure = post.meta('ogg_enclosure', lang)
         if enclosure:
@@ -60,7 +60,7 @@ class GenerateRSS(Task):
 
     def set_site(self, site):
         """Set Nikola site."""
-        site.register_path_handler('rss', self.rss_path)
+        site.register_path_handler('rss_ogg', self.rss_ogg_path)
         return super(GenerateRSS, self).set_site(site)
 
     def gen_tasks(self):
@@ -91,7 +91,7 @@ class GenerateRSS(Task):
         yield self.group_task()
         for lang in kw["translations"]:
             output_name = os.path.join(kw['output_folder'],
-                                       self.site.path("rss", None, lang))
+                                       self.site.path("rss_ogg", None, lang))
             deps = []
             deps_uptodate = []
             if kw["show_untranslated_posts"]:
@@ -105,7 +105,7 @@ class GenerateRSS(Task):
             feed_url = urljoin(self.site.config['BASE_URL'], self.site.link("rss", None, lang).lstrip('/'))
 
             task = {
-                'basename': 'generate_ogg_rss',
+                'basename': 'generate_rss_ogg',
                 'name': os.path.normpath(output_name),
                 'file_dep': deps,
                 'targets': [output_name],
@@ -113,7 +113,7 @@ class GenerateRSS(Task):
                             (lang, kw["blog_title"](lang), kw["site_url"],
                              kw["blog_description"](lang), posts, output_name,
                              kw["feed_teasers"], kw["feed_plain"], kw['feed_length'], feed_url,
-                             _enclosure, kw["feed_links_append_query"]))],
+                             self._enclosure, kw["feed_links_append_query"]))],
 
                 'task_dep': ['render_posts'],
                 'clean': True,
@@ -121,7 +121,7 @@ class GenerateRSS(Task):
             }
             yield utils.apply_filters(task, kw['filters'])
 
-    def rss_path(self, name, lang):
+    def rss_ogg_path(self, name, lang):
         """A link to the RSS feed path.
 
         Example:
@@ -129,4 +129,4 @@ class GenerateRSS(Task):
         link://rss => /blog/rss.xml
         """
         return [_f for _f in [self.site.config['TRANSLATIONS'][lang],
-                              self.site.config['RSS_PATH'], 'rss_ogg.xml'] if _f]
+                              self.site.config['RSS_OGG_PATH'], 'rss_ogg.xml'] if _f]
